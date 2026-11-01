@@ -8,9 +8,9 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/styles.css">
-<script src="/chart.umd.min.js" defer></script>
-<script src="/common.js" defer></script>
-<script src="/app.js" defer></script>
+<script src="/vendor/chart.umd.min.js" defer></script>
+<script src="/js/common.js" defer></script>
+<script src="/js/app.js" defer></script>
 </head>
 <body>
 <svg width="0" height="0" class="hidden" aria-hidden="true">
@@ -29,14 +29,12 @@
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
 </svg>
 <main>
-  <div id="boot" class="center"><div class="card authcard"><div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Money Manager</h1><small>Loading…</small></div></div>
-    <p class="muted">If this message doesn't go away, the app's script files are missing from the deployment. Make sure <code>app.js</code>, <code>common.js</code>, <code>register.js</code> and <code>chart.umd.min.js</code> are in the top level of your GitHub repository, next to <code>index.html</code>.</p></div></div>
 
   <!-- Sign in -->
   <section id="loginView" class="center hidden">
     <div class="card authcard">
       <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Money Manager</h1><small>Sign in to continue</small></div></div>
-      <form id="loginForm" class="stack" method="post" action="/" novalidate>
+      <form id="loginForm" class="stack" novalidate>
         <div><label for="email">Email</label><input id="email" type="email" autocomplete="username" maxlength="254" required></div>
         <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" maxlength="128" required></div>
         <div class="err" id="authErr" role="alert"></div>
@@ -183,7 +181,7 @@
         </div>
         <div class="card">
           <div class="card-title"><h2>Change password</h2></div>
-          <form id="pwForm" class="stack" method="post" action="/" novalidate>
+          <form id="pwForm" class="stack" novalidate>
             <input type="email" autocomplete="username" class="hidden" id="pwUser" tabindex="-1" aria-hidden="true">
             <div><label for="pwCur">Current password</label><input id="pwCur" type="password" autocomplete="current-password" maxlength="128"></div>
             <div><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" maxlength="128"></div>
