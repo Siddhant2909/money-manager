@@ -172,50 +172,80 @@
   }
 
   // ---------- overview ----------
-  function accountCard(acc) {
-    const s = accountStats(acc, null);
-    if (acc.kind === "card") {
-      const avail = round2(acc.credit_limit - s.closing), pct = acc.credit_limit ? Math.min(100, (s.closing / acc.credit_limit) * 100) : 0;
-      return `<div class="acc"><div class="a-top"><span class="a-name">${esc(acc.name)}</span><span class="a-kind">Card</span></div>
-        <div class="a-val">${fmt(s.closing)}</div><div class="a-sub">due · ${fmt0(avail)} of ${fmt0(acc.credit_limit)} available</div>
-        <div class="bar"><span data-w="${Math.max(0, pct).toFixed(1)}"${s.closing > acc.credit_limit ? ' class="over"' : ""}></span></div></div>`;
-    }
-    return `<div class="acc"><div class="a-top"><span class="a-name">${esc(acc.name)}</span><span class="a-kind">${KIND_LABEL[acc.kind]}</span></div>
-      <div class="a-val${s.closing < 0 ? " neg" : ""}">${fmt(s.closing)}</div><div class="a-sub">balance</div></div>`;
-  }
   function applyBars(root) { root.querySelectorAll(".bar > span").forEach((b) => { b.style.width = b.dataset.w + "%"; }); }
+  let ovRange = "month";
+  const pctChange = (now, before) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
   function renderDashboard() {
-    const months = monthsWithData(), tot = monthTotals(null);
-    $("dashKpis").innerHTML = stat("Income", fmt0(tot.income), months.length ? `${monthLabel(months[0])} – ${monthLabel(months[months.length - 1])}` : "No entries yet")
-      + stat("Spent", fmt0(tot.exp), "Excludes investments")
-      + stat("Saved", fmt0(tot.sav), "Income − spent", tot.sav < 0 ? "neg" : "pos")
-      + stat("Invested", fmt0(tot.inv), "Not counted as spending");
-    const accs = sortedAccounts();
-    $("dashAccounts").innerHTML = accs.map(accountCard).join("") || `<div class="empty">No accounts</div>`;
+    const months = monthsWithData(), cur = state.today.slice(0, 7), prev = shiftMonth(cur, -1);
+    const accs = sortedAccounts(), bal = (a) => accountStats(a, null).closing;
+    const banks = accs.filter((a) => a.kind === "bank").reduce((s, a) => s + bal(a), 0);
+    const cash = accs.filter((a) => a.kind === "cash").reduce((s, a) => s + bal(a), 0);
+    const dues = accs.filter((a) => a.kind === "card").reduce((s, a) => s + bal(a), 0);
+    const have = round2(banks + cash - dues), tot = monthTotals(null);
+    $("ovSub").textContent = months.length ? `${monthLabel(months[0])} – ${monthLabel(months[months.length - 1])}` : "Add entries to see your overview";
+    // headline: what you have right now, and what's invested
+    const parts = [`Banks ${fmt0(banks)}`, cash ? `Cash ${fmt0(cash)}` : "", dues ? `Card dues −${fmt0(dues)}` : ""].filter(Boolean);
+    $("ovHero").innerHTML = `<div class="hero-main"><div class="s-label">Money you have</div>
+        <div class="hero-big${have < 0 ? " neg" : ""}">${esc(fmt0(have))}</div><div class="hero-sub">${parts.map((x) => `<span>${esc(x)}</span>`).join(" · ")}</div></div>
+      <button type="button" class="hero-inv" data-goto="investment"><span><span class="s-label">Invested</span><span class="hero-inv-v">${esc(fmt0(tot.inv))}</span></span>${icon("i-right")}</button>`;
+    // this month against last month
+    const t = monthTotals(cur), p = monthTotals(prev), ch = pctChange(t.exp, p.exp), prevName = MON[+prev.slice(5, 7) - 1];
+    $("ovMonthTitle").textContent = `${monthLong(cur).split(" ")[0]} so far`;
+    const spentSub = ch === null ? (p.exp ? "" : "Nothing last month") : `${ch > 0 ? "↑" : ch < 0 ? "↓" : ""} ${Math.abs(ch)}% vs ${prevName}`;
+    $("dashKpis").innerHTML = stat("Spent", fmt0(t.exp), spentSub, "")
+      + stat("Income", fmt0(t.income), p.income ? `${prevName}: ${fmt0(p.income)}` : "")
+      + stat("Saved", fmt0(t.sav), t.income > 0 ? `${Math.max(0, Math.round((t.sav / t.income) * 100))}% of income` : "", t.sav < 0 ? "neg" : t.sav > 0 ? "pos" : "");
+    const subEl = $("dashKpis").querySelector(".stat .s-sub");
+    if (subEl && ch !== null) subEl.classList.add(ch > 0 ? "neg" : "pos");
+    // accounts
+    $("dashAccounts").innerHTML = accs.map((a) => {
+      const v = bal(a);
+      const sub = a.kind === "card" ? `${fmt0(round2(a.credit_limit - v))} of ${fmt0(a.credit_limit)} available` : KIND_LABEL[a.kind] === "Bank" ? "Bank account" : "Cash";
+      const bar = a.kind === "card" ? `<span class="bar"><span data-w="${Math.max(0, Math.min(100, (v / a.credit_limit) * 100)).toFixed(1)}"${v > a.credit_limit ? ' class="over"' : ""}></span></span>` : "";
+      return `<button type="button" class="row" data-acc="${esc(a.id)}"><span class="r-ic">${icon(KIND_ICON[a.kind])}</span>
+        <span class="r-main"><span class="r-title">${esc(a.name)}</span><span class="r-sub">${esc(sub)}</span>${bar}</span>
+        <span class="r-val"><span class="r-amt${a.kind !== "card" && v < 0 ? " neg" : ""}">${esc(fmt(v))}</span><span class="r-sub">${a.kind === "card" ? "due" : "balance"}</span></span></button>`;
+    }).join("") || `<div class="rows-empty">No accounts yet.</div>`;
     applyBars($("dashAccounts"));
-    const liquid = accs.filter((a) => a.kind !== "card").reduce((s, a) => s + accountStats(a, null).closing, 0);
-    $("dashLiquid").textContent = fmt(liquid); $("dashLiquid").classList.toggle("neg", liquid < 0);
-
-    let html = `<thead><tr><th>Month</th><th class="num">Income</th><th class="num">Spent</th><th class="num">Saved</th><th class="num">Invested</th></tr></thead><tbody>`;
+    // spending by category (top 6, the rest as Other)
+    $("ovRange").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.r === ovRange));
+    const cats = new Map();
+    for (const x of state.txns) {
+      if (!isSpend(x) || (ovRange === "month" && x.month !== cur)) continue;
+      const k = catKey(x.category) || "\u0000";
+      if (!cats.has(k)) cats.set(k, { name: catKey(x.category) ? x.category.trim() : "Uncategorised", amt: 0 });
+      cats.get(k).amt += x.amount;
+    }
+    let list = [...cats.values()].filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
+    if (list.length > 7) list = list.slice(0, 6).concat([{ name: `Other (${list.length - 6})`, amt: list.slice(6).reduce((s, x) => s + x.amt, 0) }]);
+    const spent = list.reduce((s, x) => s + x.amt, 0);
+    const c = donut("cat", "chCat", list.map((x) => x.name), list.map((x) => x.amt), { text: fmt0(spent), sub: ovRange === "month" ? "THIS MONTH" : "ALL TIME" });
+    legend($("lgCat"), list.map((x) => x.name), list.map((x) => x.amt), c.colors, c.total);
+    // last 6 months: income vs spent
+    const last6 = Array.from({ length: 6 }, (_, i) => shiftMonth(cur, i - 5)), tt = last6.map((m) => monthTotals(m));
+    if (state.charts.trend) { state.charts.trend.destroy(); state.charts.trend = null; }
+    if (typeof Chart !== "undefined") {
+      const ds = (data, color) => ({ data, backgroundColor: color, borderRadius: 5, maxBarThickness: 22, categoryPercentage: 0.62, barPercentage: 0.9 });
+      state.charts.trend = new Chart($("chTrend"), {
+        type: "bar",
+        data: { labels: last6.map((m) => MON[+m.slice(5, 7) - 1]), datasets: [ds(tt.map((x) => x.income), css("--green")), ds(tt.map((x) => x.exp), css("--c1"))] },
+        options: {
+          maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: css("--text"), titleColor: css("--surface"), bodyColor: css("--surface"),
+            callbacks: { title: (it) => monthLabel(last6[it[0].dataIndex]), label: (x) => ` ${x.datasetIndex ? "Spent" : "Income"}: ${fmt0(x.raw)}` } } },
+          scales: { x: { grid: { display: false }, border: { display: false } },
+            y: { beginAtZero: true, grid: { color: css("--border") }, border: { display: false }, ticks: { maxTicksLimit: 5, callback: (v) => (v >= 100000 ? v / 100000 + "L" : v >= 1000 ? v / 1000 + "k" : v) } } },
+        },
+      });
+    }
+    // all months table (folded)
     const rows = months.map((m) => ({ m, ...monthTotals(m) }));
-    for (const r of [...rows].reverse()) html += `<tr><td>${monthLabel(r.m)}</td><td class="num">${num0(r.income)}</td><td class="num">${num0(r.exp)}</td><td class="num${r.sav < 0 ? " neg" : ""}">${num0(r.sav)}</td><td class="num">${num0(r.inv)}</td></tr>`;
-    html += rows.length ? `<tr class="total"><td>Total</td><td class="num">${num0(tot.income)}</td><td class="num">${num0(tot.exp)}</td><td class="num${tot.sav < 0 ? " neg" : ""}">${num0(tot.sav)}</td><td class="num">${num0(tot.inv)}</td></tr>`
+    $("ovMonths").textContent = rows.length ? `${rows.length} month${rows.length === 1 ? "" : "s"}` : "";
+    let html = `<thead><tr><th>Month</th><th class="num">Income</th><th class="num">Spent</th><th class="num">Saved</th><th class="num hide-sm">Invested</th></tr></thead><tbody>`;
+    for (const r of [...rows].reverse()) html += `<tr><td>${monthLabel(r.m)}</td><td class="num">${num0(r.income)}</td><td class="num">${num0(r.exp)}</td><td class="num${r.sav < 0 ? " neg" : ""}">${num0(r.sav)}</td><td class="num hide-sm">${num0(r.inv)}</td></tr>`;
+    html += rows.length ? `<tr class="total"><td>Total</td><td class="num">${num0(tot.income)}</td><td class="num">${num0(tot.exp)}</td><td class="num${tot.sav < 0 ? " neg" : ""}">${num0(tot.sav)}</td><td class="num hide-sm">${num0(tot.inv)}</td></tr>`
       : `<tr><td colspan="5" class="empty">No entries yet.</td></tr>`;
     $("dashTable").innerHTML = html + "</tbody>";
-
-    const labels = months.map(monthLabel);
-    let c = donut("exp", "chExp", labels, rows.map((r) => r.exp), { text: fmt0(tot.exp), sub: "TOTAL" });
-    legend($("lgExp"), labels, rows.map((r) => r.exp), c.colors, c.total);
-    const cats = new Map();
-    for (const t of state.txns) {
-      if (t.kind !== "expense" || t.type === "Investment") continue;
-      const k = catKey(t.category) || "\u0000";
-      if (!cats.has(k)) cats.set(k, { name: catKey(t.category) ? t.category.trim() : "Uncategorised", amt: 0 });
-      cats.get(k).amt += t.amount;
-    }
-    const list = [...cats.values()].filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
-    c = donut("cat", "chCat", list.map((x) => x.name), list.map((x) => x.amt), { text: fmt0(tot.exp), sub: "SPENT" });
-    legend($("lgCat"), list.map((x) => x.name), list.map((x) => x.amt), c.colors, c.total);
   }
 
   // ---------- monthly ----------
@@ -993,6 +1023,10 @@
     $("fType").addEventListener("change", refreshFormFields);
     $("fInv").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { setInvType(b.dataset.v); $("fName").focus(); } });
     $("invAdd").addEventListener("click", () => openEntry(null, { kind: "invest" }));
+    // overview
+    $("ovHero").addEventListener("click", (e) => { if (e.target.closest("[data-goto=investment]")) setTab("investment"); });
+    $("dashAccounts").addEventListener("click", (e) => { const b = e.target.closest("[data-acc]"); if (b) openAccount(b.dataset.acc); });
+    $("ovRange").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.r !== ovRange) { ovRange = b.dataset.r; renderDashboard(); } });
     $("invGroups").addEventListener("click", (e) => { const b = e.target.closest("[data-edit]"); if (b) openEntry(b.dataset.edit); });
     $("fRepeat").addEventListener("change", refreshFormFields);
     $("fPresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyPreset(b.dataset.p); });

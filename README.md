@@ -4,7 +4,7 @@ A personal finance web app with these pages:
 
 - **Sign in:** a single **Continue with Google** button. There are no passwords and no registration form. The first time you continue with Google, your account is created.
 - **Monthly** (the home page): the month's entries, grouped by day, with search and a type filter. **Add entry** opens a form; click any entry to edit or delete it. Account balances for the month are in a collapsible section below. On desktop, press `N` to add an entry.
-- **Overview:** totals, account balances, charts and a month-by-month table.
+- **Overview:** how much money you have now (banks + cash − card dues) and how much is invested; this month against last month; your accounts (tap one to edit it); spending by category for this month or all time; a 6-month income vs spending chart; and every month in a fold-away table.
 - **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
 - **Investments:** your portfolio. It shows the total, this year and this month, a split by type (Mutual fund, Stocks, Gold, FD, RD, PPF, NPS, Other), each holding with its entries, and a month-by-month chart. **Add investment** opens the entry form with **Invest** selected.
 - **Settings** (click your name, top right): your profile, your accounts and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
