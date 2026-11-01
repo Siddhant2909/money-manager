@@ -2,9 +2,10 @@
 //
 // Environment variables
 //   DATABASE_URL (or POSTGRES_URL)  set automatically when Neon Postgres is added in Vercel
-//   ALLOWED_EMAILS   optional. Comma-separated emails allowed to register. If unset, only the first account can register.
-//   AUTH_RATE_LIMIT  optional. Sign-in/registration attempts allowed per IP per 10 minutes (default 40).
-//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET  optional. Turn on "Continue with Google" (OAuth web client).
+//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET  required. Google OAuth web client used for sign-in (the only way in).
+//   ALLOWED_EMAILS   optional. Comma-separated Google emails allowed to create an account. If unset, only the
+//                    first account can be created.
+//   AUTH_RATE_LIMIT  optional. Sign-in attempts allowed per IP per 10 minutes (default 40).
 //   APP_URL          optional. Public URL of the app (e.g. https://money.example.com), used for the Google
 //                    redirect URI. If unset, it is taken from the request's host.
 //
@@ -12,25 +13,22 @@
 //   - Parameterised SQL only; every query is scoped to the signed-in user; composite foreign keys stop
 //     entries from pointing at another user's accounts (IDOR).
 //   - Server-side sessions: random 256-bit token in a __Host- cookie (HttpOnly, Secure, SameSite=Strict),
-//     only its SHA-256 hash is stored; absolute and idle expiry; new session on every sign-in; logout and
-//     password change revoke sessions.
+//     only its SHA-256 hash is stored; absolute and idle expiry; new session on every sign-in; logout
+//     revokes the session.
 //   - CSRF: per-session synchronizer token required on every state-changing request, plus Origin check
 //     and JSON-only bodies.
-//   - Passwords: scrypt with per-user salt, length/common-password policy, account lockout after repeated
-//     failures, per-IP rate limiting, constant-time comparisons, generic sign-in errors.
+//   - Sign-in: Google only (OAuth 2.0 code flow with PKCE and a one-time state); per-IP rate limiting.
+//     There are no passwords to guess or leak.
 //   - Strict allow-list validation of every field; size limits; control characters stripped.
 //   - Security headers on every response; generic error messages (details only in server logs, no user data).
 const crypto = require("crypto");
-const { promisify } = require("util");
 const { Pool } = require("pg");
-const scrypt = promisify(crypto.scrypt);
 
 const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 const ALLOWED = (process.env.ALLOWED_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const AUTH_LIMIT = Math.max(5, parseInt(process.env.AUTH_RATE_LIMIT || "40", 10) || 40);
 const AUTH_WINDOW_MIN = 10;
 const SESSION_DAYS = 14, IDLE_DAYS = 7;
-const MAX_FAILS = 10, LOCK_MINUTES = 15;
 const MAX_BODY = 64 * 1024;
 const G_ID = process.env.GOOGLE_CLIENT_ID || "", G_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const googleOn = () => !!(G_ID && G_SECRET);
@@ -43,10 +41,6 @@ const ID_RE = /^[0-9]{1,18}$/;
 const KINDS = ["expense", "income", "transfer"];
 const TYPES = ["Need", "Want", "Investment"];
 const SLOTS = [["bank", 1], ["bank", 2], ["card", 1], ["card", 2], ["cash", 1]];
-const COMMON_PASSWORDS = new Set(["password", "password1", "password12", "password123", "1234567890", "12345678910", "qwertyuiop",
-  "iloveyou123", "welcome123", "admin12345", "letmein123", "football123", "abcdef1234", "qwerty1234", "password@123",
-  "india12345", "passw0rd123", "1q2w3e4r5t", "zaq12wsxcde", "monkey12345"]);
-
 class ClientError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const bad = (msg) => new ClientError(400, msg);
 
@@ -233,14 +227,6 @@ function nameOf(v) {
   if (!n) throw bad("Enter your name");
   return n;
 }
-function passwordProblem(pw, email) {
-  if (typeof pw !== "string" || pw.length < 10 || pw.length > 128) return "Password must be 10 to 128 characters";
-  if (COMMON_PASSWORDS.has(pw.toLowerCase())) return "This password is too common";
-  const local = String(email || "").split("@")[0].toLowerCase();
-  if (local.length >= 4 && pw.toLowerCase().includes(local)) return "Password must not contain your email name";
-  if (/^(.)\1+$/.test(pw)) return "Password must not be one repeated character";
-  return null;
-}
 function cleanAccounts(list) {
   if (!Array.isArray(list) || list.length > 5) throw bad("Invalid accounts");
   const out = new Map();
@@ -290,22 +276,7 @@ function cleanTxn(row) {
   return t;
 }
 
-// ---------- passwords & sessions ----------
-const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-async function hashPassword(pw) {
-  const salt = crypto.randomBytes(16);
-  const key = await scrypt(pw, salt, 64, SCRYPT);
-  return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString("base64")}$${key.toString("base64")}`;
-}
-async function checkPassword(pw, stored) {
-  const [alg, N, r, p, salt, hash] = String(stored).split("$");
-  if (alg !== "scrypt" || !salt || !hash) return false;
-  const want = Buffer.from(hash, "base64");
-  const got = await scrypt(String(pw).slice(0, 128), Buffer.from(salt, "base64"), want.length, { N: +N, r: +r, p: +p, maxmem: SCRYPT.maxmem });
-  return got.length === want.length && crypto.timingSafeEqual(got, want);
-}
-const DUMMY_HASH = "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$" + Buffer.alloc(64).toString("base64");
-
+// ---------- sessions ----------
 async function createSession(client, req, email) {
   const token = crypto.randomBytes(32).toString("base64url");
   const csrf = crypto.randomBytes(24).toString("base64url");
@@ -318,98 +289,16 @@ async function getSession(req) {
   const token = readCookie(req, cookieName(req));
   if (!token || token.length > 100) return null;
   const h = sha256(token);
-  const r = await q(`select s.user_email, s.csrf, u.name, u.pass_hash like 'scrypt$%' as has_password, s.last_seen < now() - interval '10 minutes' as stale
+  const r = await q(`select s.user_email, s.csrf, u.name, s.last_seen < now() - interval '10 minutes' as stale
     from mm_sessions s join mm_users u on u.email = s.user_email
     where s.token_hash = $1 and s.expires_at > now() and s.last_seen > now() - make_interval(days => $2::int)`, [h, IDLE_DAYS]);
   if (!r.rows.length) return null;
   if (r.rows[0].stale) await q(`update mm_sessions set last_seen = now() where token_hash = $1`, [h]);
   const row = r.rows[0];
-  return { email: row.user_email, name: row.name || null, hasPassword: row.has_password, csrf: row.csrf, tokenHash: h };
+  return { email: row.user_email, name: row.name || null, csrf: row.csrf, tokenHash: h };
 }
 
 // ---------- operations ----------
-async function insertAccounts(c, email, accounts) {
-  for (const a of accounts) {
-    await c.query(`insert into mm_accounts (user_email, kind, slot, name, opening_balance, credit_limit) values ($1,$2,$3,$4,$5,$6)`,
-      [email, a.kind, a.slot, a.name, a.opening, a.limit]);
-  }
-}
-async function register(req, res, body) {
-  await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
-  const email = emailOf(body.email);
-  const name = nameOf(body.name);
-  const problem = passwordProblem(body.password, email);
-  if (problem) throw bad(problem);
-  // Accounts can be given here or set up after the first sign-in.
-  const accounts = body.accounts === undefined || body.accounts === null ? null : cleanAccounts(body.accounts);
-  const hash = await hashPassword(body.password);
-  const s = await tx(async (c) => {
-    await c.query("select pg_advisory_xact_lock(727275)");
-    // Password reset: someone with database access sets pass_hash = 'RESET'; the owner then registers again
-    // with the same email to choose a new password. Existing accounts and entries are kept.
-    const existing = await c.query("select pass_hash from mm_users where email = $1 for update", [email]);
-    if (existing.rows.length && existing.rows[0].pass_hash === "RESET") {
-      await c.query("update mm_users set pass_hash = $2, name = $3, failed_logins = 0, locked_until = null where email = $1", [email, hash, name]);
-      await c.query("delete from mm_sessions where user_email = $1", [email]);
-      const has = await c.query("select count(*)::int as n from mm_accounts where user_email = $1", [email]);
-      if (!has.rows[0].n && accounts) await insertAccounts(c, email, accounts);
-      return createSession(c, req, email);
-    }
-    if (existing.rows.length) throw new ClientError(409, "An account with this email already exists. Please sign in.");
-    if (ALLOWED.length) {
-      if (!ALLOWED.includes(email)) throw new ClientError(403, "This email is not allowed to register.");
-    } else {
-      const n = await c.query("select count(*)::int as n from mm_users");
-      if (n.rows[0].n > 0) throw new ClientError(403, "Registration is closed. An account already exists for this app.");
-    }
-    const ins = await c.query("insert into mm_users (email, pass_hash, name) values ($1, $2, $3) on conflict (email) do nothing returning email", [email, hash, name]);
-    if (!ins.rows.length) throw new ClientError(409, "An account with this email already exists. Please sign in.");
-    if (accounts) await insertAccounts(c, email, accounts);
-    return createSession(c, req, email);
-  });
-  return send(res, 200, { email, name, hasPassword: true, csrf: s.csrf }, { "Set-Cookie": s.cookie });
-}
-async function login(req, res, body) {
-  await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
-  const email = String(body.email || "").trim().toLowerCase().slice(0, 254);
-  const password = typeof body.password === "string" ? body.password : "";
-  const u = await q("select pass_hash, name, locked_until > now() as locked from mm_users where email = $1", [email]);
-  const user = u.rows[0];
-  if (user && user.locked) throw new ClientError(429, `Too many attempts. Try again in ${LOCK_MINUTES} minutes.`);
-  const ok = await checkPassword(password, user ? user.pass_hash : DUMMY_HASH);
-  if (!user || !ok) {
-    if (user) {
-      await q(`update mm_users u set failed_logins = f.n,
-          locked_until = case when f.n >= $2::int then now() + make_interval(mins => $3::int) else null end
-        from (select email, case when locked_until is not null and locked_until <= now() then 1 else failed_logins + 1 end as n
-              from mm_users where email = $1) f where u.email = f.email`, [email, MAX_FAILS, LOCK_MINUTES]);
-    }
-    await sleep(300 + crypto.randomInt(200));
-    throw new ClientError(401, "Incorrect email or password.");
-  }
-  const s = await tx(async (c) => {
-    await c.query("update mm_users set failed_logins = 0, locked_until = null where email = $1", [email]);
-    return createSession(c, req, email);
-  });
-  return send(res, 200, { email, name: user.name || null, hasPassword: true, csrf: s.csrf }, { "Set-Cookie": s.cookie });
-}
-async function changePassword(req, res, sess, body) {
-  await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
-  const u = await q("select pass_hash, pass_hash like 'scrypt$%' as has_password from mm_users where email = $1", [sess.email]);
-  // Accounts created with Google have no password yet; setting the first one needs no current password.
-  if (!u.rows.length || (u.rows[0].has_password && !(await checkPassword(body.current, u.rows[0].pass_hash)))) {
-    await sleep(300);
-    throw new ClientError(400, "Current password is incorrect.");
-  }
-  const problem = passwordProblem(body.next, sess.email);
-  if (problem) throw bad(problem);
-  const hash = await hashPassword(body.next);
-  await tx(async (c) => {
-    await c.query("update mm_users set pass_hash = $2, failed_logins = 0, locked_until = null where email = $1", [sess.email, hash]);
-    await c.query("delete from mm_sessions where user_email = $1 and token_hash <> $2", [sess.email, sess.tokenHash]);  // sign out other devices
-  });
-  return send(res, 200, { ok: true });
-}
 const ACC_COLS = `id::text as id, kind, slot, name, opening_balance::float8 as opening_balance, credit_limit::float8 as credit_limit`;
 const TXN_COLS = `id::text as id, kind, month, to_char(expense_date, 'YYYY-MM-DD') as expense_date, name, amount::float8 as amount,
   category, type, account_id::text as account_id, to_account_id::text as to_account_id, created_at`;
@@ -482,8 +371,7 @@ function redirect(res, location, cookies) {
   res.end();
 }
 function googleStart(req, res, url) {
-  const from = url.searchParams.get("from") === "register" ? "register" : "login";
-  if (!googleOn()) return redirect(res, (from === "register" ? "/register" : "/") + "?auth_error=google_off");
+  if (!googleOn()) return redirect(res, "/?auth_error=google_off");
   const state = crypto.randomBytes(24).toString("base64url");
   const verifier = crypto.randomBytes(32).toString("base64url");
   const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
@@ -492,12 +380,12 @@ function googleStart(req, res, url) {
     scope: "openid email profile", state, code_challenge: challenge, code_challenge_method: "S256", prompt: "select_account",
   });
   // SameSite=Lax so the cookie comes back on the top-level redirect from Google.
-  const cookie = `${oauthCookie(req)}=${state}.${verifier}.${from}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? "; Secure" : ""}`;
+  const cookie = `${oauthCookie(req)}=${state}.${verifier}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? "; Secure" : ""}`;
   return redirect(res, "https://accounts.google.com/o/oauth2/v2/auth?" + params.toString(), [cookie]);
 }
 async function googleCallback(req, res, url) {
-  const [state, verifier, from] = (readCookie(req, oauthCookie(req)) || "").split(".");
-  const fail = (code) => redirect(res, (from === "register" ? "/register" : "/") + "?auth_error=" + code, [clearOauth(req)]);
+  const [state, verifier] = (readCookie(req, oauthCookie(req)) || "").split(".");
+  const fail = (code) => redirect(res, "/?auth_error=" + code, [clearOauth(req)]);
   try {
     if (!googleOn()) return fail("google_off");
     if (url.searchParams.get("error")) return fail("google_cancelled");
@@ -523,14 +411,14 @@ async function googleCallback(req, res, url) {
       await c.query("select pg_advisory_xact_lock(727275)");
       const ex = await c.query("select email from mm_users where email = $1 for update", [email]);
       if (ex.rows.length) {
-        await c.query("update mm_users set failed_logins = 0, locked_until = null, name = coalesce(name, $2) where email = $1", [email, gname]);
+        await c.query("update mm_users set name = coalesce(name, $2) where email = $1", [email, gname]);
       } else {
         if (ALLOWED.length) { if (!ALLOWED.includes(email)) throw new ClientError(403, "not_allowed"); }
         else {
           const n = await c.query("select count(*)::int as n from mm_users");
           if (n.rows[0].n > 0) throw new ClientError(403, "closed");
         }
-        // 'GOOGLE' never matches a password hash, so password sign-in stays off until the user sets one.
+        // pass_hash is a legacy column from password sign-in; Google accounts don't use it.
         await c.query("insert into mm_users (email, pass_hash, name) values ($1, 'GOOGLE', $2)", [email, gname]);
       }
       return createSession(c, req, email);
@@ -567,12 +455,10 @@ module.exports = async function handler(req, res) {
     housekeeping();
     if (op === "google_cb" && req.method === "GET") return await googleCallback(req, res, url);
 
-    if (req.method === "POST" && op === "register") return await register(req, res, body);
-    if (req.method === "POST" && op === "login") return await login(req, res, body);
 
     const sess = await getSession(req);
     if (op === "session" && req.method === "GET") {
-      return send(res, 200, sess ? { authenticated: true, email: sess.email, name: sess.name, hasPassword: sess.hasPassword, csrf: sess.csrf } : { authenticated: false });
+      return send(res, 200, sess ? { authenticated: true, email: sess.email, name: sess.name, csrf: sess.csrf } : { authenticated: false });
     }
     if (!sess) return send(res, 401, { error: "Please sign in." });
     if (req.method === "POST" && !safeEqual(req.headers["x-csrf-token"] || "", sess.csrf)) {
@@ -590,7 +476,6 @@ module.exports = async function handler(req, res) {
       case "logout":
         await q("delete from mm_sessions where token_hash = $1", [sess.tokenHash]);
         return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
-      case "changePassword": return await changePassword(req, res, sess, body);
       case "saveProfile": {
         const name = nameOf(body.name);
         await q("update mm_users set name = $2 where email = $1", [sess.email, name]);

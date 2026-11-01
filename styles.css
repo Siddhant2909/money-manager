@@ -95,20 +95,6 @@ select.sm { width: auto; height: 34px; font-size: 13.5px; padding-left: 11px; }
 .btn.google { background: var(--surface); border-color: var(--border-strong); color: var(--text); height: 46px; font-weight: 550; text-decoration: none; }
 .btn.google:hover { background: var(--surface-2); }
 .btn.google svg.g { width: 18px; height: 18px; }
-.or { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--faint); font-size: 12.5px; }
-.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-
-/* first-time account setup */
-.acc-set { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
-.acc-set .acc-body { padding: 16px; }
-.acc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.acc-title { flex: 1; font-weight: 600; font-size: 15px; }
-.acc-add { display: none; width: 100%; align-items: center; gap: 10px; padding: 14px 16px; border: 0; background: none; cursor: pointer;
-  color: var(--muted); font-weight: 550; font-size: 14.5px; border-radius: 14px; }
-.acc-add:hover { color: var(--text); background: var(--surface-2); }
-.acc-set.closed { border-style: dashed; background: transparent; }
-.acc-set.closed .acc-add { display: flex; }
-.acc-set.closed .acc-body { display: none; }
 
 /* ---------- auth pages ---------- */
 .center { position: relative; isolation: isolate; min-height: 100vh; display: grid; place-items: center; padding: 40px 0; }
@@ -118,15 +104,22 @@ select.sm { width: auto; height: 34px; font-size: 13.5px; padding-left: 11px; }
 .authcard { width: 100%; max-width: 400px; }
 .authcard h1 { font-size: 26px; margin-top: 22px; }
 .authcard > .muted { margin: 6px 0 28px; font-size: 15px; }
+.signin { text-align: center; max-width: 360px; }
+.signin .logo.lg { width: 52px; height: 52px; margin: 0 auto; border-radius: 14px; }
+.signin h1 { font-size: 28px; }
+.signin .btn.google { height: 50px; font-size: 15px; }
+.signin .err { margin-top: 16px; text-align: left; }
+.signin-foot { margin-top: 18px; }
+svg.g.sm { width: 18px; height: 18px; }
+
+/* settings: first-time welcome */
+.welcome { border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface) 60%); }
+.welcome h3 { font-size: 18px; margin-bottom: 6px; }
+.welcome .muted { margin-bottom: 18px; max-width: 520px; }
 .logo { display: block; border-radius: 8px; flex: none; }
 .logo.lg { width: 44px; height: 44px; border-radius: 12px; }
-.authcard .err, .onboard .err, .dlg-form .err { background: var(--red-soft); padding: 10px 12px; border-radius: 10px; }
-.auth-foot { text-align: center; font-size: 14px; color: var(--muted); }
-.onboard { max-width: 520px; margin: 12px auto 0; }
-.ob-step { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
-.onboard > .muted { margin: 8px 0 24px; font-size: 15px; }
-.onboard #setupForm > * + * { margin-top: 10px; }
-.onboard .btn.block { margin-top: 22px; height: 46px; }
+.authcard .err, .dlg-form .err { background: var(--red-soft); padding: 10px 12px; border-radius: 10px; }
 
 /* ---------- app shell ---------- */
 header.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -389,7 +382,6 @@ dialog[open] { animation: pop .18s ease-out; }
   dialog { width: 100vw; max-width: 100vw; max-height: 92vh; margin: auto 0 0; border-radius: 20px 20px 0 0; }
   dialog[open] { animation: up .22s ease-out; }
   .dlg-form { padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
-  .acc-set .form { grid-template-columns: minmax(0, 1fr); }
   .row { padding: 13px 16px; gap: 12px; }
   .r-val .r-sub { display: none; }
   .pf-row { flex-wrap: wrap; }
