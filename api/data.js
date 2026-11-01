@@ -22,8 +22,17 @@ let pool = null;
 let ready = null;
 let secret = null;
 
+// Neon's URL says sslmode=require; the pg driver already treats that as verify-full (full certificate check)
+// and prints a warning about it. Asking for verify-full explicitly keeps the same security without the warning.
+function connectionString() {
+  try {
+    const u = new URL(DB_URL);
+    if (["prefer", "require", "verify-ca"].includes(u.searchParams.get("sslmode"))) u.searchParams.set("sslmode", "verify-full");
+    return u.toString();
+  } catch { return DB_URL; }
+}
 function db() {
-  if (!pool) pool = new Pool({ connectionString: DB_URL, max: 3, idleTimeoutMillis: 10000 });
+  if (!pool) pool = new Pool({ connectionString: connectionString(), max: 3, idleTimeoutMillis: 10000 });
   return pool;
 }
 
