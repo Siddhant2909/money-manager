@@ -7,7 +7,7 @@ A personal finance web app with these pages:
 - **Investments:** where you've invested.
 - **Registration:** a separate page where you enter your name and set up your bank accounts, credit cards and cash. Your name (not your email) is shown in the app and can be changed in Settings.
 
-The design is light by default and follows your device's dark mode.
+The design is dark.
 
 It runs on Vercel, with a Neon Postgres database.
 
@@ -17,7 +17,7 @@ It runs on Vercel, with a Neon Postgres database.
 money-manager/
 ├── index.html            sign-in page and the app
 ├── register.html         registration page (served at /register)
-├── styles.css            design (light, follows system dark mode)
+├── styles.css            design (dark)
 ├── favicon.svg           logo / browser icon
 ├── apple-touch-icon.png  icon when added to a phone's home screen
 ├── vercel.json           security headers (CSP, HSTS, etc.)
