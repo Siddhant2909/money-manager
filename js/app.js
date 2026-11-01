@@ -226,7 +226,7 @@
     }
     $("accMonthTable").innerHTML = at + "</tbody>";
     $("monthLiquid").textContent = fmt(liquid); $("monthLiquid").classList.toggle("neg", liquid < 0);
-    $("monthLiquidS").textContent = fmt0(liquid) + " in banks + cash";
+    $("monthLiquidS").innerHTML = `${esc(fmt0(liquid))}<span class="hide-sm"> in banks + cash</span>`;
 
     renderEntries();
   }
@@ -268,7 +268,7 @@
           : `<span class="e-ic h${hue(r.category || r.name)}">${esc(letter)}</span>`;
         html += `<button type="button" class="entry" data-edit="${esc(r.id)}">
           ${ic}
-          <span class="e-main"><span class="e-name">${esc(name)}</span><span class="e-meta">${meta}${tags}</span></span>
+          <span class="e-main"><span class="e-name">${esc(name)}</span><span class="e-meta">${meta ? `<span class="m-txt">${meta}</span>` : ""}${tags}</span></span>
           <span class="e-amt ${cls}">${sign}${money(r.amount)}</span>
         </button>`;
       }
@@ -449,6 +449,7 @@
     renderSettings();
     $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); $("pfErr").textContent = "";
     document.querySelector(".tabs").classList.add("hidden");  // Settings is its own page; Back returns to the tabs
+    markNav("settings");
     showView("settingsView"); window.scrollTo({ top: 0 });
   }
   function renderSettings() {
@@ -554,20 +555,29 @@
   function startOnboarding() {
     state.onboarding = true;
     document.querySelector(".tabs").classList.add("hidden"); $("settingsBtn").disabled = true;
+    $("bottomNav").classList.add("hidden");
     openSettings();
   }
   function finishOnboarding() {
     state.onboarding = false;
-    $("settingsBtn").disabled = false;
+    $("settingsBtn").disabled = false; $("bottomNav").classList.remove("hidden");
     setMonth(state.month); setTab("monthly");
     toast("You're all set. Add your first entry.");
   }
 
   // ---------- navigation & auth ----------
+  function markNav(key) {
+    $("bottomNav").querySelectorAll("button").forEach((b) => {
+      const on = (b.dataset.tab || b.dataset.nav) === key;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+  }
   function setTab(tab) {
     state.tab = tab;
     document.querySelector(".tabs").classList.remove("hidden"); $("settingsBtn").disabled = false;
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    markNav(tab);
     showView("tab-" + tab);
     window.scrollTo({ top: 0 });
     if (tab === "dashboard") renderDashboard(); else if (tab === "monthly") renderMonthly(); else renderInvestment();
@@ -588,7 +598,7 @@
   function signedOut(msg) {
     MM.setCsrf(""); state.email = null; state.name = null; state.accounts = []; state.txns = [];
     for (const d of ["entryDlg", "accDlg"]) if ($(d).open) $(d).close();
-    state.onboarding = false; $("settingsBtn").disabled = false;
+    state.onboarding = false; $("settingsBtn").disabled = false; $("bottomNav").classList.remove("hidden");
     for (const k of Object.keys(state.charts)) if (state.charts[k]) { state.charts[k].destroy(); state.charts[k] = null; }
     showPage("login"); $("authErr").textContent = msg || "";
   }
@@ -611,6 +621,13 @@
       $(dlg).addEventListener("click", (e) => { if (e.target === $(dlg)) $(dlg).close(); });
     }
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+    $("bottomNav").addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      const onSettings = !$("settingsView").classList.contains("hidden");
+      if (b.dataset.nav === "settings") { if (!onSettings) openSettings(); }
+      else if (b.dataset.tab === state.tab && !onSettings) window.scrollTo({ top: 0, behavior: "smooth" });  // tap the current tab to go to the top
+      else setTab(b.dataset.tab);
+    });
     $("monthBtn").addEventListener("click", () => { const i = $("month"); try { i.showPicker(); } catch { i.focus(); } });
     $("month").addEventListener("change", () => { if ($("month").value) setMonth($("month").value); });
     $("prevM").addEventListener("click", () => setMonth(shiftMonth(state.month, -1)));

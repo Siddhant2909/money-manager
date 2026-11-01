@@ -349,15 +349,30 @@ dialog[open] { animation: pop .18s ease-out; }
 .spin { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: var(--text); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- bottom navigation (phones only) ---------- */
+.bottomnav { display: none; }
+
 /* ---------- small screens ---------- */
 .hide-sm { }
 @media (max-width: 720px) {
-  main { padding: 0 16px 96px; }
-  header.top { flex-wrap: wrap; row-gap: 10px; padding: 12px 0; margin-bottom: 20px; }
-  .tabs { order: 3; width: 100%; }
-  .tabs button { flex: 1; }
-  .who { display: none; }
-  .userchip { padding-right: 8px; }
+  main { padding: 0 16px calc(150px + env(safe-area-inset-bottom)); }
+  header.top { padding: 10px 0; margin-bottom: 18px; }
+  .tabs { display: none; }
+  .who, .userchip svg.i { display: none; }
+  .userchip { padding: 3px; }
+  #settingsBack { display: none; }
+  .bottomnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(4, 1fr);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 88%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(18px); backdrop-filter: saturate(1.4) blur(18px); }
+  .bottomnav.hidden { display: none !important; }
+  .bottomnav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px;
+    border: 0; background: none; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer;
+    border-radius: 12px; transition: color .15s; }
+  .bottomnav button svg.i { width: 22px; height: 22px; stroke-width: 1.8; }
+  .bottomnav button.active { color: var(--text); }
+  .bottomnav button.active svg.i { color: var(--accent); stroke-width: 2.1; }
+  .bottomnav button:active { background: var(--surface-2); }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat:nth-child(3) { border-left: 0; }
   .stat:nth-child(n+3) { border-top: 1px solid var(--border); }
@@ -365,8 +380,13 @@ dialog[open] { animation: pop .18s ease-out; }
   .s-val { font-size: 19px; }
   .title, .monthbtn { font-size: 22px; }
   /* Add entry becomes a floating button */
-  #addBtn { position: fixed; right: 18px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 20; height: 54px; padding: 0 22px;
+  #addBtn { position: fixed; right: 16px; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 20; width: 56px; height: 56px; padding: 0;
     border-radius: 999px; box-shadow: var(--shadow-lg); }
+  #addBtn span { display: none; }
+  #addBtn svg.i { width: 24px; height: 24px; }
+  .e-meta { flex-wrap: nowrap; }
+  .m-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fold summary { font-size: 14.5px; }
   .toolbar { padding: 12px; }
   .seg button { padding: 5px 10px; }
   .search { flex: 1 1 100%; }
