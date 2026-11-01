@@ -67,13 +67,14 @@ const MM = (() => {
     for (const s of SLOTS) {
       const a = find(s.kind, s.slot), p = `acc-${s.kind}${s.slot}`;
       const v = (x) => (x === null || x === undefined ? "" : esc(String(x)));
-      html += `<fieldset><legend>${esc(s.title)}${s.required ? "" : s.kind === "cash" ? "" : ' <span class="faint">(optional)</span>'}</legend><div class="form">`;
+      const optional = !s.required && s.kind !== "cash";
+      html += `<fieldset class="acc-set"><legend>${esc(s.title)}${optional ? ' <span class="faint">optional</span>' : ""}</legend><div class="form">`;
       if (s.kind !== "cash") html += `<div class="full"><label for="${p}-name">Name</label><input id="${p}-name" maxlength="60" autocomplete="off" placeholder="${esc(s.ph)}" value="${v(a && a.name)}"></div>`;
       if (s.kind === "bank") html += `<div class="full"><label for="${p}-bal">${balLabel}</label><input id="${p}-bal" inputmode="decimal" placeholder="0.00" value="${v(a && a.opening_balance)}"></div>`;
       if (s.kind === "card") html += `<div><label for="${p}-limit">Credit limit (₹)</label><input id="${p}-limit" inputmode="decimal" placeholder="e.g. 100000" value="${v(a && a.credit_limit)}"></div>
         <div><label for="${p}-bal">${dueLabel}</label><input id="${p}-bal" inputmode="decimal" placeholder="0.00" value="${v(a && a.opening_balance)}"></div>`;
       if (s.kind === "cash") html += `<div class="full"><label for="${p}-bal">${mode === "edit" ? "Opening cash in hand (₹)" : "Cash in hand (₹)"}</label><input id="${p}-bal" inputmode="decimal" placeholder="0.00" value="${v(a && a.opening_balance)}"></div>`;
-      html += `</div>${s.kind === "bank" && s.slot === 2 || s.kind === "card" ? '<div class="hint">Leave the name empty if you don\'t have this.</div>' : ""}</fieldset>`;
+      html += `</div></fieldset>`;
     }
     container.innerHTML = html;
     return {

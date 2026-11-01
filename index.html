@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f11" media="(prefers-color-scheme: dark)">
 <title>Money Manager</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -14,26 +15,28 @@
 </head>
 <body>
 <svg width="0" height="0" class="hidden" aria-hidden="true">
-  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
-  <symbol id="i-list" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 13h10M7 17h6"/></symbol>
-  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
-  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></symbol>
-  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
-  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></symbol>
+  <symbol id="i-outa" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
 </svg>
 <main>
 
   <!-- Sign in -->
   <section id="loginView" class="center hidden">
-    <div class="card authcard">
-      <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Money Manager</h1><small>Sign in to continue</small></div></div>
+    <div class="authcard">
+      <img class="logo lg" src="/favicon.svg" alt="" width="44" height="44">
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to Money Manager</p>
       <form id="loginForm" class="stack" novalidate>
         <div><label for="email">Email</label><input id="email" type="email" autocomplete="username" maxlength="254" required></div>
         <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" maxlength="128" required></div>
@@ -47,154 +50,182 @@
   <!-- App -->
   <section id="appView" class="hidden">
     <header class="top">
-      <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Money Manager</h1></div></div>
+      <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="28" height="28"><span>Money Manager</span></div>
       <nav class="tabs" aria-label="Sections">
-        <button type="button" data-tab="dashboard" class="active"><svg class="i"><use href="#i-home"/></svg>Dashboard</button>
-        <button type="button" data-tab="monthly"><svg class="i"><use href="#i-list"/></svg>Monthly</button>
-        <button type="button" data-tab="investment"><svg class="i"><use href="#i-trend"/></svg>Investment</button>
+        <button type="button" data-tab="monthly" class="active">Monthly</button>
+        <button type="button" data-tab="dashboard">Overview</button>
+        <button type="button" data-tab="investment">Investments</button>
       </nav>
       <div class="userbox">
+        <span class="avatar" id="avatar" aria-hidden="true"></span>
         <span class="who" id="who"></span>
-        <button class="iconbtn" id="settingsBtn" type="button" title="Accounts &amp; settings" aria-label="Accounts and settings"><svg class="i"><use href="#i-gear"/></svg></button>
+        <button class="iconbtn" id="settingsBtn" type="button" title="Settings" aria-label="Settings"><svg class="i"><use href="#i-gear"/></svg></button>
         <button class="iconbtn" id="signOut" type="button" title="Sign out" aria-label="Sign out"><svg class="i"><use href="#i-out"/></svg></button>
       </div>
     </header>
     <div class="err" id="appErr" role="alert"></div>
-    <div id="loader" class="loader hidden"><div class="spin"></div><div>Loading your data…</div></div>
+    <div id="loader" class="loader hidden"><div class="spin"></div></div>
 
     <!-- First-time account setup (accounts created before this version) -->
     <div id="setupView" class="hidden">
-      <div class="card authcard wide">
-        <div class="card-title"><h2>Set up your accounts</h2></div>
-        <p class="muted">Add your bank accounts, credit cards and cash so balances can be tracked. Entries you added before this
-          update stay as they are and don't change these balances; you can link them to an account later by editing them.</p>
+      <div class="narrow">
+        <h2 class="title">Set up your accounts</h2>
+        <p class="muted">Add your bank accounts, credit cards and cash so balances can be tracked. Entries you added before
+          stay as they are; you can link them to an account later by editing them.</p>
         <div id="setupForm" class="stack"></div>
         <div class="err" id="setupErr" role="alert"></div>
         <button class="btn primary block" id="setupSave" type="button">Save and continue</button>
       </div>
     </div>
 
-    <!-- Dashboard -->
-    <div id="tab-dashboard" class="hidden">
-      <div class="pagehead"><div><h2>Overview</h2><div class="muted">All months combined</div></div></div>
-      <div class="kpis" id="dashKpis"></div>
-      <div class="card mb">
-        <div class="card-title"><h2>Accounts</h2><span class="muted">Current balances</span></div>
-        <div class="accounts" id="dashAccounts"></div>
-        <div class="total-line"><span>Available money (banks + cash)</span><span class="amt" id="dashLiquid"></span></div>
-      </div>
-      <div class="card mb">
-        <div class="card-title"><h2>Month-wise summary</h2><span class="muted">₹, whole rupees</span></div>
-        <div class="tablewrap"><table id="dashTable"></table></div>
-        <p class="note">Savings = Income − Expenditure. Expenditure excludes entries marked Investment. Transfers between your accounts are not income or expenditure.</p>
-      </div>
-      <div class="grid two mb">
-        <div class="card"><div class="card-title"><h2>Expenditure by month</h2></div>
-          <div class="chartwrap"><div class="chartbox"><canvas id="chExp" aria-label="Expenditure by month chart"></canvas></div><div class="legend" id="lgExp"></div></div></div>
-        <div class="card"><div class="card-title"><h2>Savings by month</h2></div>
-          <div class="chartwrap"><div class="chartbox"><canvas id="chSav" aria-label="Savings by month chart"></canvas></div><div class="legend" id="lgSav"></div></div>
-          <p class="note">A month with negative savings shows as 0 in this chart.</p></div>
-      </div>
-      <div class="card"><div class="card-title"><h2>Category-wise expenditure</h2><span class="muted">All months</span></div>
-        <div class="chartwrap side"><div class="chartbox"><canvas id="chCat" aria-label="Category chart"></canvas></div><div class="legend" id="lgCat"></div></div></div>
-    </div>
-
     <!-- Monthly -->
     <div id="tab-monthly" class="hidden">
       <div class="pagehead">
-        <div><h2 id="monthTitle"></h2><div class="muted">Income, expenses and transfers</div></div>
-        <div class="monthnav">
-          <button class="iconbtn" id="prevM" type="button" aria-label="Previous month"><svg class="i"><use href="#i-left"/></svg></button>
-          <button class="monthbtn" id="monthBtn" type="button"><svg class="i"><use href="#i-cal"/></svg><span id="monthLbl"></span><input type="month" id="month" tabindex="-1" aria-label="Choose month"></button>
-          <button class="iconbtn" id="nextM" type="button" aria-label="Next month"><svg class="i"><use href="#i-right"/></svg></button>
-        </div>
-      </div>
-      <div class="kpis" id="monthKpis"></div>
-
-      <div class="card mb">
-          <div class="card-title"><h2 id="formTitle">Add entry</h2></div>
-          <div class="form four" id="entryForm">
-            <div><label for="fKind">Entry type</label>
-              <select id="fKind"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></div>
-            <div><label for="fDate">Date</label><input id="fDate" type="date"></div>
-            <div class="span2 full"><label for="fAmt">Amount (₹)</label><input id="fAmt" inputmode="decimal" placeholder="0.00" autocomplete="off"></div>
-            <div class="span2 full"><label for="fName" id="lblName">Description</label><input id="fName" maxlength="120" autocomplete="off"></div>
-            <div class="span2 full" id="wrapCat"><label for="fCat" id="lblCat">Category</label><input id="fCat" list="catList" maxlength="60" autocomplete="off"></div>
-            <div class="span2 full" id="wrapType"><label for="fType">Need / Want / Investment</label>
-              <select id="fType"><option value="">—</option><option>Need</option><option>Want</option><option>Investment</option></select></div>
-            <div class="span2 full" id="wrapAcc"><label for="fAcc" id="lblAcc">Payment mode</label><select id="fAcc"></select></div>
-            <div class="span2 full hidden" id="wrapFrom"><label for="fFrom">From</label><select id="fFrom"></select></div>
-            <div class="span2 full hidden" id="wrapTo"><label for="fTo">To</label><select id="fTo"></select></div>
-            <div class="full form-actions">
-              <button class="btn primary" id="fSave" type="button"><svg class="i"><use href="#i-plus"/></svg><span>Add entry</span></button>
-              <button class="btn ghost hidden" id="fCancel" type="button">Cancel</button>
-              <span class="err" id="fErr" role="alert"></span>
-            </div>
+        <div>
+          <div class="greet" id="greet"></div>
+          <div class="monthnav">
+            <button class="iconbtn plain" id="prevM" type="button" aria-label="Previous month"><svg class="i"><use href="#i-left"/></svg></button>
+            <button class="monthbtn" id="monthBtn" type="button"><span id="monthTitle"></span><svg class="i"><use href="#i-down"/></svg><input type="month" id="month" tabindex="-1" aria-label="Choose month"></button>
+            <button class="iconbtn plain" id="nextM" type="button" aria-label="Next month"><svg class="i"><use href="#i-right"/></svg></button>
           </div>
-          <datalist id="catList"></datalist>
-      </div>
-      <div class="card mb">
-          <div class="card-title"><h2>Accounts this month</h2></div>
-          <div class="tablewrap"><table id="accMonthTable"></table></div>
-          <div class="total-line"><span>Banks + cash at month end</span><span class="amt" id="monthLiquid"></span></div>
-          <p class="note">Each month starts from the previous month's closing balance. For cards, In is the amount spent, Out is the amount paid off, and Closing is the amount due.</p>
+        </div>
+        <button class="btn primary" id="addBtn" type="button"><svg class="i"><use href="#i-plus"/></svg><span>Add entry</span></button>
       </div>
 
-      <div class="card">
-        <div class="card-title"><h2>Entries</h2><span class="muted" id="entryCount"></span></div>
-        <div class="filters">
-          <div><label for="filKind">Entry type</label><select id="filKind"><option value="">All</option><option value="income">Income</option><option value="expense">Expense</option><option value="transfer">Transfer</option></select></div>
-          <div><label for="filCat">Category</label><select id="filCat"></select></div>
-          <div><label for="filType">Need / Want / Investment</label><select id="filType"><option value="">All</option><option>Need</option><option>Want</option><option>Investment</option><option value="__blank">(none)</option></select></div>
-          <div><label for="filAcc">Account</label><select id="filAcc"></select></div>
+      <div class="summary" id="monthKpis"></div>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div class="seg" id="filKind" role="tablist" aria-label="Filter entries">
+            <button type="button" data-k="" class="on">All</button>
+            <button type="button" data-k="expense">Expenses</button>
+            <button type="button" data-k="income">Income</button>
+            <button type="button" data-k="transfer">Transfers</button>
+          </div>
+          <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="filQ" type="search" placeholder="Search" aria-label="Search entries" autocomplete="off"></label>
         </div>
         <div class="list" id="expList"></div>
+      </section>
+
+      <details class="panel fold" id="accFold">
+        <summary><span>Account balances</span><span class="muted" id="monthLiquidS"></span><svg class="i chev"><use href="#i-down"/></svg></summary>
+        <div class="tablewrap"><table id="accMonthTable"></table></div>
+        <div class="total-line"><span>Banks + cash at month end</span><span class="amt" id="monthLiquid"></span></div>
+        <p class="note">Each month starts from the previous month's closing balance. For cards, In is the amount spent, Out is the amount paid off, and Closing is the amount due.</p>
+      </details>
+    </div>
+
+    <!-- Overview -->
+    <div id="tab-dashboard" class="hidden">
+      <div class="pagehead"><div><h2 class="title">Overview</h2><div class="muted">All months combined</div></div></div>
+      <div class="summary" id="dashKpis"></div>
+      <section class="panel">
+        <div class="panel-title"><h3>Accounts</h3><span class="muted">Current balances</span></div>
+        <div class="accounts" id="dashAccounts"></div>
+        <div class="total-line"><span>Available money (banks + cash)</span><span class="amt" id="dashLiquid"></span></div>
+      </section>
+      <div class="grid two">
+        <section class="panel"><div class="panel-title"><h3>Spending by category</h3></div>
+          <div class="chartwrap"><div class="chartbox"><canvas id="chCat" aria-label="Category chart"></canvas></div><div class="legend" id="lgCat"></div></div></section>
+        <section class="panel"><div class="panel-title"><h3>Expenditure by month</h3></div>
+          <div class="chartwrap"><div class="chartbox"><canvas id="chExp" aria-label="Expenditure by month chart"></canvas></div><div class="legend" id="lgExp"></div></div></section>
       </div>
+      <section class="panel">
+        <div class="panel-title"><h3>Month by month</h3><span class="muted">₹</span></div>
+        <div class="tablewrap"><table id="dashTable"></table></div>
+        <p class="note">Savings = Income − Expenditure. Expenditure excludes investments; transfers between your accounts are not counted.</p>
+      </section>
     </div>
 
     <!-- Investment -->
     <div id="tab-investment" class="hidden">
-      <div class="pagehead"><div><h2>Investments</h2><div class="muted">Expense entries marked Investment, grouped by where you invested</div></div></div>
-      <div class="kpis" id="invKpis"></div>
-      <div class="card mb"><div class="card-title"><h2>Where you've invested</h2><span class="muted">All months</span></div>
-        <div class="chartwrap side"><div class="chartbox"><canvas id="chInv" aria-label="Investments by place chart"></canvas></div>
-          <div class="tablewrap"><table id="invPlaces"></table></div></div></div>
-      <div class="card">
-        <div class="card-title"><h2>Investment entries</h2>
-          <div><label for="filPlace" class="hidden">Place</label><select id="filPlace" aria-label="Filter by place"></select></div></div>
+      <div class="pagehead"><div><h2 class="title">Investments</h2><div class="muted">Expenses marked Investment, grouped by where you invested</div></div></div>
+      <div class="summary" id="invKpis"></div>
+      <section class="panel"><div class="panel-title"><h3>Where you've invested</h3></div>
+        <div class="chartwrap"><div class="chartbox"><canvas id="chInv" aria-label="Investments by place chart"></canvas></div>
+          <div class="tablewrap"><table id="invPlaces"></table></div></div></section>
+      <section class="panel">
+        <div class="panel-title"><h3>Entries</h3>
+          <select id="filPlace" class="sm" aria-label="Filter by place"></select></div>
         <div class="tablewrap"><table id="invTable"></table></div>
-      </div>
+      </section>
     </div>
 
     <!-- Settings -->
     <div id="settingsView" class="hidden">
-      <div class="pagehead"><div><h2>Accounts &amp; settings</h2></div>
+      <div class="pagehead"><div><h2 class="title">Settings</h2></div>
         <button class="btn ghost" id="settingsBack" type="button"><svg class="i"><use href="#i-back"/></svg>Back</button></div>
       <div class="grid wide-left">
-        <div class="card">
-          <div class="card-title"><h2>Your accounts</h2></div>
-          <p class="muted">Opening balances are the amounts you started with; current balances are calculated from your entries.
+        <section class="panel">
+          <div class="panel-title"><h3>Your accounts</h3></div>
+          <p class="muted">Opening balances are what you started with; current balances are calculated from your entries.
             An account that has entries can't be removed.</p>
           <div id="settingsForm" class="stack"></div>
           <div class="err" id="settingsErr" role="alert"></div>
           <button class="btn primary" id="settingsSave" type="button">Save accounts</button>
-        </div>
-        <div class="card">
-          <div class="card-title"><h2>Change password</h2></div>
-          <form id="pwForm" class="stack" novalidate>
-            <input type="email" autocomplete="username" class="hidden" id="pwUser" tabindex="-1" aria-hidden="true">
-            <div><label for="pwCur">Current password</label><input id="pwCur" type="password" autocomplete="current-password" maxlength="128"></div>
-            <div><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" maxlength="128"></div>
-            <div><label for="pwNew2">Confirm new password</label><input id="pwNew2" type="password" autocomplete="new-password" maxlength="128"></div>
-            <div class="err" id="pwErr" role="alert"></div>
-            <button class="btn primary" id="pwSave" type="submit">Change password</button>
-            <p class="faint">Changing your password signs you out on other devices.</p>
-          </form>
+        </section>
+        <div>
+          <section class="panel">
+            <div class="panel-title"><h3>Profile</h3></div>
+            <form id="profileForm" class="stack" novalidate>
+              <div><label for="pfName">Your name</label><input id="pfName" maxlength="60" autocomplete="name"></div>
+              <div class="faint" id="pfEmail"></div>
+              <div class="err" id="pfErr" role="alert"></div>
+              <button class="btn primary" id="pfSave" type="submit">Save name</button>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="panel-title"><h3>Change password</h3></div>
+            <form id="pwForm" class="stack" novalidate>
+              <input type="email" autocomplete="username" class="hidden" id="pwUser" tabindex="-1" aria-hidden="true">
+              <div><label for="pwCur">Current password</label><input id="pwCur" type="password" autocomplete="current-password" maxlength="128"></div>
+              <div><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" maxlength="128"></div>
+              <div><label for="pwNew2">Confirm new password</label><input id="pwNew2" type="password" autocomplete="new-password" maxlength="128"></div>
+              <div class="err" id="pwErr" role="alert"></div>
+              <button class="btn primary" id="pwSave" type="submit">Change password</button>
+              <p class="faint">Changing your password signs you out on other devices.</p>
+            </form>
+          </section>
         </div>
       </div>
     </div>
   </section>
 </main>
+
+<!-- Add / edit entry -->
+<dialog id="entryDlg" aria-labelledby="formTitle">
+  <form method="dialog" id="entryForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="formTitle">New entry</h2>
+      <button class="iconbtn plain" id="fClose" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="seg full" id="fKind" role="radiogroup" aria-label="Entry type">
+      <button type="button" data-k="expense" class="on">Expense</button>
+      <button type="button" data-k="income">Income</button>
+      <button type="button" data-k="transfer">Transfer</button>
+    </div>
+    <div class="amount-in"><span>₹</span><input id="fAmt" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="Amount"></div>
+    <div class="form">
+      <div class="full"><label for="fName" id="lblName">Description</label><input id="fName" maxlength="120" autocomplete="off"></div>
+      <div id="wrapCat"><label for="fCat" id="lblCat">Category</label><input id="fCat" list="catList" maxlength="60" autocomplete="off"></div>
+      <div id="wrapDate"><label for="fDate">Date</label><input id="fDate" type="date"></div>
+      <div id="wrapAcc"><label for="fAcc" id="lblAcc">Paid from</label><select id="fAcc"></select></div>
+      <div id="wrapType"><label for="fType">Need / Want / Investment</label>
+        <select id="fType"><option value="">—</option><option>Need</option><option>Want</option><option>Investment</option></select></div>
+      <div class="hidden" id="wrapFrom"><label for="fFrom">From</label><select id="fFrom"></select></div>
+      <div class="hidden" id="wrapTo"><label for="fTo">To</label><select id="fTo"></select></div>
+    </div>
+    <datalist id="catList"></datalist>
+    <div class="err" id="fErr" role="alert"></div>
+    <div class="dlg-foot">
+      <button class="btn danger-ghost hidden" id="fDelete" type="button">Delete</button>
+      <span class="grow"></span>
+      <button class="btn ghost" id="fCancel" type="button">Cancel</button>
+      <button class="btn primary" id="fSave" type="submit"><span>Add entry</span></button>
+    </div>
+  </form>
+</dialog>
+
 <div class="toast" id="toast" role="status"><svg class="i"><use href="#i-check"/></svg><span id="toastMsg"></span></div>
 </body>
 </html>

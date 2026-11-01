@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f11" media="(prefers-color-scheme: dark)">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Create account · Money Manager</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -15,23 +16,26 @@
 <body>
 <main>
   <section class="center">
-    <div class="card authcard wide">
-      <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Create your account</h1><small>Money Manager</small></div></div>
+    <div class="authcard wide">
+      <img class="logo lg" src="/favicon.svg" alt="" width="44" height="44">
+      <h1>Create your account</h1>
+      <p class="muted">A few details and you're ready to track your money.</p>
       <form id="regForm" class="stack" novalidate>
-        <fieldset>
-          <legend>Sign-in details</legend>
+        <div class="step">
+          <h3>About you</h3>
           <div class="form">
+            <div class="full"><label for="name">Your name</label><input id="name" autocomplete="name" maxlength="60" required placeholder="e.g. Priya Sharma"></div>
             <div class="full"><label for="email">Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required></div>
             <div><label for="password">Password</label><input id="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
             <div><label for="password2">Confirm password</label><input id="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
           </div>
           <div class="hint">At least 10 characters. A short phrase works well, e.g. "teal lamp river 42".</div>
-        </fieldset>
-        <div>
-          <h2 class="muted">Where you spend from</h2>
-          <p class="faint">Add up to 2 bank accounts, 2 credit cards and your cash. Balances update automatically as you add entries.</p>
         </div>
-        <div id="accForm" class="stack"></div>
+        <div class="step">
+          <h3>Where you spend from</h3>
+          <p class="faint">Add up to 2 bank accounts, 2 credit cards and your cash. You can change these later.</p>
+          <div id="accForm" class="stack"></div>
+        </div>
         <div class="err" id="regErr" role="alert"></div>
         <button class="btn primary block" id="regBtn" type="submit">Create account</button>
         <p class="auth-foot">Already registered? <a href="/">Sign in</a></p>
