@@ -10,7 +10,9 @@
     e.preventDefault();
     const err = $("regErr");
     err.textContent = "";
+    const name = $("name").value.trim();
     const email = $("email").value.trim();
+    if (!name) { err.textContent = "Enter your name."; return; }
     const pw = $("password").value, pw2 = $("password2").value;
     if (!/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
     const p = passwordProblem(pw, email);
@@ -20,7 +22,7 @@
     if (error) { err.textContent = error; return; }
     $("regBtn").disabled = true;
     try {
-      await api("register", { email, password: pw, accounts });
+      await api("register", { name, email, password: pw, accounts });
       $("password").value = $("password2").value = "";
       location.replace("/");
     } catch (ex) {

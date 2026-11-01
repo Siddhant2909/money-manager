@@ -77,6 +77,7 @@ async function ensureSchema() {
       await c.query(`create table if not exists mm_users (
         email text primary key, pass_hash text not null, failed_logins int not null default 0,
         locked_until timestamptz, created_at timestamptz not null default now())`);
+      await c.query(`alter table mm_users add column if not exists name text`);
       await c.query(`create table if not exists mm_sessions (
         token_hash text primary key, user_email text not null references mm_users(email) on delete cascade,
         csrf text not null, created_at timestamptz not null default now(),
@@ -222,6 +223,11 @@ function emailOf(v) {
   if (e.length > 254 || !EMAIL_RE.test(e)) throw bad("Enter a valid email address");
   return e;
 }
+function nameOf(v) {
+  const n = text(v, 60);
+  if (!n) throw bad("Enter your name");
+  return n;
+}
 function passwordProblem(pw, email) {
   if (typeof pw !== "string" || pw.length < 10 || pw.length > 128) return "Password must be 10 to 128 characters";
   if (COMMON_PASSWORDS.has(pw.toLowerCase())) return "This password is too common";
@@ -307,11 +313,12 @@ async function getSession(req) {
   const token = readCookie(req, cookieName(req));
   if (!token || token.length > 100) return null;
   const h = sha256(token);
-  const r = await q(`select user_email, csrf, last_seen < now() - interval '10 minutes' as stale from mm_sessions
-    where token_hash = $1 and expires_at > now() and last_seen > now() - make_interval(days => $2::int)`, [h, IDLE_DAYS]);
+  const r = await q(`select s.user_email, s.csrf, u.name, s.last_seen < now() - interval '10 minutes' as stale
+    from mm_sessions s join mm_users u on u.email = s.user_email
+    where s.token_hash = $1 and s.expires_at > now() and s.last_seen > now() - make_interval(days => $2::int)`, [h, IDLE_DAYS]);
   if (!r.rows.length) return null;
   if (r.rows[0].stale) await q(`update mm_sessions set last_seen = now() where token_hash = $1`, [h]);
-  return { email: r.rows[0].user_email, csrf: r.rows[0].csrf, tokenHash: h };
+  return { email: r.rows[0].user_email, name: r.rows[0].name || null, csrf: r.rows[0].csrf, tokenHash: h };
 }
 
 // ---------- operations ----------
@@ -324,6 +331,7 @@ async function insertAccounts(c, email, accounts) {
 async function register(req, res, body) {
   await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
   const email = emailOf(body.email);
+  const name = nameOf(body.name);
   const problem = passwordProblem(body.password, email);
   if (problem) throw bad(problem);
   const accounts = cleanAccounts(body.accounts);
@@ -334,7 +342,7 @@ async function register(req, res, body) {
     // with the same email to choose a new password. Existing accounts and entries are kept.
     const existing = await c.query("select pass_hash from mm_users where email = $1 for update", [email]);
     if (existing.rows.length && existing.rows[0].pass_hash === "RESET") {
-      await c.query("update mm_users set pass_hash = $2, failed_logins = 0, locked_until = null where email = $1", [email, hash]);
+      await c.query("update mm_users set pass_hash = $2, name = $3, failed_logins = 0, locked_until = null where email = $1", [email, hash, name]);
       await c.query("delete from mm_sessions where user_email = $1", [email]);
       const has = await c.query("select count(*)::int as n from mm_accounts where user_email = $1", [email]);
       if (!has.rows[0].n) await insertAccounts(c, email, accounts);
@@ -347,18 +355,18 @@ async function register(req, res, body) {
       const n = await c.query("select count(*)::int as n from mm_users");
       if (n.rows[0].n > 0) throw new ClientError(403, "Registration is closed. An account already exists for this app.");
     }
-    const ins = await c.query("insert into mm_users (email, pass_hash) values ($1, $2) on conflict (email) do nothing returning email", [email, hash]);
+    const ins = await c.query("insert into mm_users (email, pass_hash, name) values ($1, $2, $3) on conflict (email) do nothing returning email", [email, hash, name]);
     if (!ins.rows.length) throw new ClientError(409, "An account with this email already exists. Please sign in.");
     await insertAccounts(c, email, accounts);
     return createSession(c, req, email);
   });
-  return send(res, 200, { email, csrf: s.csrf }, { "Set-Cookie": s.cookie });
+  return send(res, 200, { email, name, csrf: s.csrf }, { "Set-Cookie": s.cookie });
 }
 async function login(req, res, body) {
   await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
   const email = String(body.email || "").trim().toLowerCase().slice(0, 254);
   const password = typeof body.password === "string" ? body.password : "";
-  const u = await q("select pass_hash, locked_until > now() as locked from mm_users where email = $1", [email]);
+  const u = await q("select pass_hash, name, locked_until > now() as locked from mm_users where email = $1", [email]);
   const user = u.rows[0];
   if (user && user.locked) throw new ClientError(429, `Too many attempts. Try again in ${LOCK_MINUTES} minutes.`);
   const ok = await checkPassword(password, user ? user.pass_hash : DUMMY_HASH);
@@ -376,7 +384,7 @@ async function login(req, res, body) {
     await c.query("update mm_users set failed_logins = 0, locked_until = null where email = $1", [email]);
     return createSession(c, req, email);
   });
-  return send(res, 200, { email, csrf: s.csrf }, { "Set-Cookie": s.cookie });
+  return send(res, 200, { email, name: user.name || null, csrf: s.csrf }, { "Set-Cookie": s.cookie });
 }
 async function changePassword(req, res, sess, body) {
   await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
@@ -474,7 +482,7 @@ module.exports = async function handler(req, res) {
 
     const sess = await getSession(req);
     if (op === "session" && req.method === "GET") {
-      return send(res, 200, sess ? { authenticated: true, email: sess.email, csrf: sess.csrf } : { authenticated: false });
+      return send(res, 200, sess ? { authenticated: true, email: sess.email, name: sess.name, csrf: sess.csrf } : { authenticated: false });
     }
     if (!sess) return send(res, 401, { error: "Please sign in." });
     if (req.method === "POST" && !safeEqual(req.headers["x-csrf-token"] || "", sess.csrf)) {
@@ -493,6 +501,11 @@ module.exports = async function handler(req, res) {
         await q("delete from mm_sessions where token_hash = $1", [sess.tokenHash]);
         return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
       case "changePassword": return await changePassword(req, res, sess, body);
+      case "saveProfile": {
+        const name = nameOf(body.name);
+        await q("update mm_users set name = $2 where email = $1", [sess.email, name]);
+        return send(res, 200, { name });
+      }
       case "saveAccounts": return send(res, 200, { accounts: await saveAccounts(sess, body) });
       case "addTxn": return send(res, 200, { row: await addTxn(sess, body) });
       case "updateTxn": return send(res, 200, { row: await updateTxn(sess, body) });

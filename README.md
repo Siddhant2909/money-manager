@@ -2,10 +2,12 @@
 
 A personal finance web app with these pages:
 
-- **Dashboard:** totals, account balances, month-wise summary and charts.
-- **Monthly:** income, expense and transfer entries, plus each account's balance for the month.
-- **Investment:** where you've invested.
-- **Registration:** a separate page where you set up your bank accounts, credit cards and cash.
+- **Monthly** (the home page): the month's entries, grouped by day, with search and a type filter. **Add entry** opens a form; click any entry to edit or delete it. Account balances for the month are in a collapsible section below. On desktop, press `N` to add an entry.
+- **Overview:** totals, account balances, charts and a month-by-month table.
+- **Investments:** where you've invested.
+- **Registration:** a separate page where you enter your name and set up your bank accounts, credit cards and cash. Your name (not your email) is shown in the app and can be changed in Settings.
+
+The design is light by default and follows your device's dark mode.
 
 It runs on Vercel, with a Neon Postgres database.
 
@@ -15,7 +17,7 @@ It runs on Vercel, with a Neon Postgres database.
 money-manager/
 ├── index.html            sign-in page and the app
 ├── register.html         registration page (served at /register)
-├── styles.css            design (dark, flat)
+├── styles.css            design (light, follows system dark mode)
 ├── favicon.svg           logo / browser icon
 ├── apple-touch-icon.png  icon when added to a phone's home screen
 ├── vercel.json           security headers (CSP, HSTS, etc.)
@@ -32,13 +34,14 @@ money-manager/
 
 ## Upgrading from the previous version
 1. Upload everything in this folder to your GitHub repository, replacing the old files. Drag the files **and** the `js`, `vendor` and `api` folders onto **Add file → Upload files**, then commit. Vercel redeploys automatically.
-2. Sign in with your existing email and password. The app asks you to set up your accounts once: Bank account 1 is required, and Bank account 2, two credit cards and cash are optional.
-3. Your earlier data is kept:
+2. Sign in with your existing email and password. Existing users have no name stored yet, so the app shows the part of your email before the @ until you add your name in **Settings → Profile**.
+3. If you're upgrading from the version before accounts existed, the app asks you to set up your accounts once: Bank account 1 is required, and Bank account 2, two credit cards and cash are optional.
+4. Your earlier data is kept:
    - Each month's salary becomes an **Income** entry named *Salary*.
    - Old expenses stay as they are.
    - Both are marked **Not linked**, so they don't change the balances you enter.
    - To link an old entry to an account, edit it.
-4. Optional:
+5. Optional:
    - Delete `GOOGLE_CLIENT_ID` from Vercel's environment variables. It is no longer used.
    - Everyone is signed out once after this update, because sessions are now stored in the database.
 
