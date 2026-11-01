@@ -4,7 +4,7 @@
   const KIND_LABEL = { bank: "Bank", card: "Card", cash: "Cash" };
   const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const state = { email: null, name: null, onboarding: false, accounts: [], txns: [], recurring: [], budgets: [],
-    reminder: { time: "21:00" }, today: todayISO(), month: thisMonth(),
+    today: todayISO(), month: thisMonth(),
     mode: "entry", editing: null, editingRow: null, editingRec: null, kind: "expense", filKind: "", tab: "monthly", charts: {} };
 
   // ---------- theme ----------
@@ -40,7 +40,6 @@
   }
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
   const shortD = (d) => `${+d.slice(8, 10)} ${MON[+d.slice(5, 7) - 1]}`;
-  function fmtTime(t) { const h = +t.slice(0, 2), m = t.slice(3, 5); return `${h % 12 || 12}:${m} ${h < 12 ? "AM" : "PM"}`; }
   const overallBudget = () => state.budgets.find((b) => b.category === null);
   const catBudgets = () => state.budgets.filter((b) => b.category !== null);
   // Spending (expenses that aren't investments) in a month, by category.
@@ -671,30 +670,6 @@
     $("budDlg").close(); renderCurrent(); toast("Budget removed");
   }
 
-  // ---------- daily reminder (a repeating calendar event; no server scheduler needed) ----------
-  function renderReminder() {
-    const t = state.reminder.time;
-    $("remTime").value = t;
-    // A 5-minute event from the chosen time today (IST wall-clock time; Google applies ctz).
-    const [y, mo, d] = state.today.split("-").map(Number), [h, mi] = t.split(":").map(Number);
-    const stamp = (dt) => dt.toISOString().slice(0, 19).replace(/[-:]/g, "");
-    const start = stamp(new Date(Date.UTC(y, mo - 1, d, h, mi))), end = stamp(new Date(Date.UTC(y, mo - 1, d, h, mi + 5)));
-    const app = location.origin + "/";
-    $("remGoogle").href = "https://calendar.google.com/calendar/render?" + new URLSearchParams({
-      action: "TEMPLATE", text: "Add today's spending in Money Manager", details: `Open Money Manager: ${app}`,
-      dates: `${start}/${end}`, ctz: "Asia/Kolkata", recur: "RRULE:FREQ=DAILY",
-    }).toString();
-    $("remIcs").href = "/api/data?op=ics&t=" + encodeURIComponent(t);
-  }
-  async function changeReminderTime() {
-    const time = $("remTime").value;
-    if (!/^\d{2}:\d{2}$/.test(time)) return;
-    $("remErr").textContent = "";
-    state.reminder.time = time; renderReminder();
-    try { await api("saveReminder", { time }); toast(`Reminder time set to ${fmtTime(time)}. Add it to your calendar below.`); }
-    catch (e) { $("remErr").textContent = e.message; }
-  }
-
   // ---------- investment ----------
   function renderInvestment() {
     const inv = state.txns.filter(isInv);
@@ -766,7 +741,6 @@
     $("welcomeTitle").textContent = firstName() ? `Welcome, ${firstName()}` : "Welcome";
     $("settingsBack").classList.toggle("hidden", state.onboarding);
     $("gEmail").textContent = state.email || "";
-    renderReminder();
   }
   async function saveProfile(e) {
     e.preventDefault();
@@ -877,7 +851,7 @@
   function applyData(d) {
     state.accounts = d.accounts; state.txns = d.transactions.map((t) => ({ ...t, amount: Number(t.amount) }));
     state.recurring = d.recurring || []; state.budgets = d.budgets || [];
-    state.reminder = d.reminder || state.reminder; state.today = d.today || todayISO();
+    state.today = d.today || todayISO();
   }
   async function reloadData() { try { applyData(await api("all")); } catch { /* keep what we have */ } }
   async function enterApp(email, name) {
@@ -972,8 +946,6 @@
     $("budSugg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { $("budCat").value = b.dataset.c; budgetHint(); $("budAmt").focus(); } });
     for (const b of ["budClose", "budCancel"]) $(b).addEventListener("click", () => $("budDlg").close());
     $("budDlg").addEventListener("click", (e) => { if (e.target === $("budDlg")) $("budDlg").close(); });
-    // reminder
-    $("remTime").addEventListener("change", changeReminderTime);
     $("fAmt").addEventListener("input", sizeAmount);
     $("fFrom").addEventListener("change", refreshFormFields);
     $("entryForm").addEventListener("submit", saveEntry);

@@ -33,7 +33,6 @@ const MAX_BODY = 64 * 1024;
 const G_ID = process.env.GOOGLE_CLIENT_ID || "", G_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const googleOn = () => !!(G_ID && G_SECRET);
 
-const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 const MONTH_RE = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 const DATE_RE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
 const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[A-Za-z]{2,}$/;
@@ -138,8 +137,6 @@ async function ensureSchema() {
         id bigserial primary key, user_email text not null references mm_users(email) on delete cascade,
         category text, amount numeric(12,2) not null check (amount > 0))`);
       await c.query(`create unique index if not exists mm_budgets_cat on mm_budgets (user_email, (lower(coalesce(category, ''))))`);
-      // Daily reminder time (HH:MM, IST) used for the calendar reminder.
-      await c.query(`alter table mm_users add column if not exists reminder_time text not null default '21:00'`);
       // One-time upgrade: earlier versions stored salary per month; turn each into an Income entry.
       await c.query(`create table if not exists mm_salaries (user_email text not null, month text not null,
         amount numeric(12,2) not null default 0, primary key (user_email, month))`);
@@ -408,7 +405,7 @@ async function updateTxn(sess, body) {
 const pad2 = (n) => String(n).padStart(2, "0");
 function istNow() {
   const d = new Date(Date.now() + 330 * 60000);   // IST is UTC+5:30 all year
-  return { date: d.toISOString().slice(0, 10), mins: d.getUTCHours() * 60 + d.getUTCMinutes() };
+  return { date: d.toISOString().slice(0, 10) };
 }
 // The given day of a month, moved back to the month's last day if needed (31 → 30 Apr, 28/29 Feb).
 function clampDate(y, m, day) {
@@ -509,31 +506,6 @@ async function saveBudget(sess, body) {
   }
 }
 
-// ---------- daily reminder (calendar event) ----------
-// No server scheduler: the reminder is a daily repeating calendar event with an alert, so the phone's
-// calendar app does the notifying. This builds the .ics file for Apple Calendar, Outlook and others.
-function reminderIcs(req, res, url) {
-  const time = url.searchParams.get("t") || "21:00";
-  if (!TIME_RE.test(time)) return send(res, 400, { error: "Invalid time" });
-  const day = istNow().date.replace(/-/g, ""), hm = time.replace(":", "");
-  const app = appOrigin(req) + "/";
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  const ics = [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Money Manager//Daily reminder//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-    "BEGIN:VTIMEZONE", "TZID:Asia/Kolkata", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0530", "TZOFFSETTO:+0530", "TZNAME:IST", "END:STANDARD", "END:VTIMEZONE",
-    "BEGIN:VEVENT", `UID:daily-reminder-${hm}@money-manager`, `DTSTAMP:${stamp}`,
-    `DTSTART;TZID=Asia/Kolkata:${day}T${hm}00`, "DURATION:PT5M", "RRULE:FREQ=DAILY",
-    "SUMMARY:Add today's spending in Money Manager", `DESCRIPTION:Open Money Manager: ${app}`, `URL:${app}`, "TRANSP:TRANSPARENT",
-    "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Add today's spending in Money Manager", "TRIGGER:PT0M", "END:VALARM",
-    "END:VEVENT", "END:VCALENDAR", "",
-  ].join("\r\n");
-  res.statusCode = 200;
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
-  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-  res.setHeader("Content-Disposition", 'attachment; filename="money-manager-reminder.ics"');
-  res.end(ics);
-}
-
 // ---------- Google sign-in (OAuth 2.0 authorization code flow with PKCE) ----------
 // No Google scripts run in the page, so the strict CSP stays as it is: the browser is sent to Google and back.
 function appOrigin(req) {
@@ -628,7 +600,6 @@ module.exports = async function handler(req, res) {
 
     if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, google: googleOn() });
     if (op === "google" && req.method === "GET") return googleStart(req, res, url);
-    if (op === "ics" && req.method === "GET") return reminderIcs(req, res, url);
     if (!DB_URL) return send(res, 503, { error: "Database not connected. Add Neon Postgres to the Vercel project and redeploy." });
     await ensureSchema();
     housekeeping();
@@ -646,16 +617,13 @@ module.exports = async function handler(req, res) {
 
     if (req.method === "GET" && op === "all") {
       await postDueRecurring(sess.email);
-      const [acc, txs, rec, bud, usr] = await Promise.all([
+      const [acc, txs, rec, bud] = await Promise.all([
         q(`select ${ACC_COLS} from mm_accounts where user_email = $1 order by kind, slot`, [sess.email]),
         q(`select ${TXN_COLS} from mm_expenses where user_email = $1 order by created_at, id`, [sess.email]),
         q(`select ${REC_COLS} from mm_recurring where user_email = $1 order by day, id`, [sess.email]),
         q(`select ${BUD_COLS} from mm_budgets where user_email = $1 order by category nulls first, id`, [sess.email]),
-        q(`select reminder_time from mm_users where email = $1`, [sess.email]),
       ]);
-      const u = usr.rows[0] || {};
-      return send(res, 200, { accounts: acc.rows, transactions: txs.rows, recurring: rec.rows, budgets: bud.rows,
-        reminder: { time: u.reminder_time || "21:00" }, today: istNow().date });
+      return send(res, 200, { accounts: acc.rows, transactions: txs.rows, recurring: rec.rows, budgets: bud.rows, today: istNow().date });
     }
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
 
@@ -684,12 +652,6 @@ module.exports = async function handler(req, res) {
       case "deleteBudget":
         await q(`delete from mm_budgets where id = $1::bigint and user_email = $2`, [id(body.id), sess.email]);
         return send(res, 200, { ok: true });
-      case "saveReminder": {
-        const time = String(body.time || "");
-        if (!TIME_RE.test(time)) throw bad("Choose a time");
-        await q(`update mm_users set reminder_time = $2 where email = $1`, [sess.email, time]);
-        return send(res, 200, { ok: true });
-      }
       default: throw bad("Unknown operation");
     }
   } catch (e) {

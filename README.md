@@ -7,7 +7,7 @@ A personal finance web app with these pages:
 - **Overview:** totals, account balances, charts and a month-by-month table.
 - **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
 - **Investments:** where you've invested.
-- **Settings** (click your name, top right): your profile, your accounts, the daily reminder and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
+- **Settings** (click your name, top right): your profile, your accounts and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
 
 The design is dark. It runs on Vercel, with a Neon Postgres database.
 
@@ -28,8 +28,8 @@ money-manager/
 ├── vendor/
 │   └── chart.umd.min.js  Chart.js 4.5.1 (hosted locally, MIT licence)
 └── api/
-    └── data.js           server API: Google sign-in, sessions, accounts, entries, budgets,
-                          recurring payments and the reminder calendar file
+    └── data.js           server API: Google sign-in, sessions, accounts, entries, budgets and
+                          recurring payments
 ```
 
 ## Setup
@@ -57,13 +57,6 @@ Optional settings:
 **Who can create an account:** anyone with a Google account. Each person gets their own accounts and entries, and nobody can see anyone else's data. To limit sign-up to specific people, set `ALLOWED_EMAILS` (comma-separated), then redeploy. A Google account whose email matches an existing account always signs in to that account, and that account's data is kept.
 
 If your Google OAuth consent screen is still in **Testing**, Google only lets the test users you listed sign in. To let anyone sign in, open **Google Auth Platform → Audience** and click **Publish app**. For basic sign-in (name and email), Google doesn't require a review.
-
-### Daily reminder
-In **Settings → Daily reminder**, pick a time (IST) and add the reminder to your calendar:
-- **Google Calendar** opens a daily repeating event, ready to save. The alert uses your calendar's default notification.
-- **Apple / Outlook / other** downloads a calendar file (`.ics`) with a daily event and an alert at that exact time. On iPhone, tap **Add All**.
-
-Your phone's calendar app sends the notification, even when Money Manager is closed. Nothing else needs setting up: there's no scheduler, push service or cost. To change the time, delete the old event from your calendar and add it again.
 
 ## Budgets and recurring payments
 - **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.
