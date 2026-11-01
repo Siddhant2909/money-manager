@@ -19,7 +19,8 @@ money-manager/
 ├── manifest.webmanifest  lets phones install the app on the home screen
 ├── styles.css            design (dark)
 ├── favicon.svg           logo / browser icon
-├── apple-touch-icon.png  icon when added to a phone's home screen
+├── apple-touch-icon.png  icon when added to an iPhone home screen
+├── icon-192.png, icon-512.png  icons for installing on Android
 ├── vercel.json           security headers (CSP, HSTS, etc.) and the /auth/google routes
 ├── package.json          installs the Postgres driver
 ├── js/
