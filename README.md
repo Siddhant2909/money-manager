@@ -7,7 +7,7 @@ A personal finance web app with these pages:
 - **Overview:** how much money you have now (banks + cash − card dues) and how much is invested; this month against last month; your accounts (tap one to edit it); spending by category for this month or all time; a 6-month income vs spending chart; and every month in a fold-away table.
 - **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
 - **Investments:** your portfolio. It shows the total, this year and this month, a split by type (Mutual fund, Stocks, Gold, FD, RD, PPF, NPS, Other), each holding with its entries, and a month-by-month chart. **Add investment** opens the entry form with **Invest** selected.
-- **Settings** (click your name, top right): your profile, your accounts and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
+- **Settings** (click your name, top right): your profile, your accounts, **App lock** and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
 
 The design is dark. It runs on Vercel, with a Neon Postgres database.
 
@@ -25,6 +25,7 @@ money-manager/
 ├── package.json          installs the Postgres driver
 ├── js/
 │   ├── common.js         shared helpers (API calls, formatting)
+│   ├── lock.js           app lock (PIN and fingerprint / face) on this device
 │   └── app.js            the app
 ├── vendor/
 │   └── chart.umd.min.js  Chart.js 4.5.1 (hosted locally, MIT licence)
@@ -58,6 +59,15 @@ Optional settings:
 **Who can create an account:** anyone with a Google account. Each person gets their own accounts and entries, and nobody can see anyone else's data. To limit sign-up to specific people, set `ALLOWED_EMAILS` (comma-separated), then redeploy. A Google account whose email matches an existing account always signs in to that account, and that account's data is kept.
 
 If your Google OAuth consent screen is still in **Testing**, Google only lets the test users you listed sign in. To let anyone sign in, open **Google Auth Platform → Audience** and click **Publish app**. For basic sign-in (name and email), Google doesn't require a review.
+
+## App lock
+In **Settings → App lock**, turn on **Lock with a PIN** (4 to 6 digits) for this device.
+- The app then asks for the PIN when it opens, and again after it's been in the background for the time you choose (immediately, 1, 5 or 15 minutes).
+- On phones that support it, you can also unlock with **fingerprint or face**, using the phone's own screen lock.
+- After 5 wrong PINs there's a short wait, which grows with more wrong tries.
+- **Forgot PIN?** on the lock screen signs you out on that device and removes the lock. Sign in again with Google to continue.
+
+The lock is set per device and is a privacy screen. The PIN never leaves the device and is stored only as a salted hash, and your data stays protected by your Google sign-in.
 
 ## Budgets and recurring payments
 - **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.

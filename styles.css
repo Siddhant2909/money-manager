@@ -456,6 +456,39 @@ dialog[open] { animation: pop .18s ease-out; }
 #entryForm .seg.full { margin-bottom: 0; }
 .dlg-foot { display: flex; align-items: center; gap: 8px; margin-top: 22px; }
 
+/* ---------- app lock ---------- */
+dialog.lockscreen { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; margin: 0; border-radius: 0;
+  background: radial-gradient(600px 340px at 50% -5%, rgba(138, 169, 245, 0.14), transparent 70%), var(--bg); box-shadow: none; animation: none; }
+dialog.lockscreen[open] { animation: fade .15s ease-out; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+dialog.lockscreen::backdrop { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.lk-wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom)); }
+.lk-wrap:focus { outline: none; }
+.lk-logo { width: 56px; height: 56px; border-radius: 15px; }
+.lk-wrap h2 { font-size: 20px; }
+.lk-dots { display: flex; gap: 14px; height: 16px; align-items: center; }
+.lk-dots span { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--muted); transition: background .12s, border-color .12s; }
+.lk-dots span.on { background: var(--text); border-color: var(--text); }
+.lk-dots.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.lk-msg { min-height: 20px; font-size: 13px; color: var(--muted); text-align: center; }
+.lk-msg.bad { color: var(--red); }
+.lk-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px 22px; }
+.lk-pad button { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font: inherit; font-size: 26px; font-weight: 500; cursor: pointer; display: grid; place-items: center; transition: background .1s, transform .05s; }
+.lk-pad button:focus { outline: none; }
+.lk-pad button:active { background: var(--surface-2); transform: scale(.96); }
+.lk-pad button.lk-fn { border-color: transparent; background: transparent; color: var(--muted); }
+.lk-pad button.lk-fn svg.i { width: 26px; height: 26px; }
+.lk-pad button.invisible { visibility: hidden; }
+.lk-pad.off { opacity: .4; pointer-events: none; }
+.lk-forgot { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; text-decoration: underline;
+  text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+.lk-intro { margin: -6px 0 16px; }
+.sec-err { margin: 10px 4px 0; }
+#lockSec select.sm { width: auto; }
+
 /* ---------- toast & loader ---------- */
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 100;
   display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; background: var(--primary); color: var(--on-primary);
