@@ -48,10 +48,12 @@ Sign-in needs a Google OAuth client. It's free and needs no billing account.
 
 Optional settings:
 - `APP_URL` (e.g. `https://money.example.com`) makes the redirect URI always use that domain.
-- `ALLOWED_EMAILS` (comma-separated) controls who can create an account.
+- `ALLOWED_EMAILS` (comma-separated) limits sign-up to those Google accounts. If it isn't set, anyone can sign up.
 - `AUTH_RATE_LIMIT` sets how many sign-in attempts are allowed per IP every 10 minutes (default 40).
 
-**Who can create an account:** by default, only the first Google account to sign in. To allow specific people, set `ALLOWED_EMAILS`, then redeploy. A Google account whose email matches an existing account always signs in to that account, including accounts created before passwords were removed. Your data is kept.
+**Who can create an account:** anyone with a Google account. Each person gets their own accounts and entries, and nobody can see anyone else's data. To limit sign-up to specific people, set `ALLOWED_EMAILS` (comma-separated), then redeploy. A Google account whose email matches an existing account always signs in to that account, and that account's data is kept.
+
+If your Google OAuth consent screen is still in **Testing**, Google only lets the test users you listed sign in. To let anyone sign in, open **Google Auth Platform → Audience** and click **Publish app**. For basic sign-in (name and email), Google doesn't require a review.
 
 ## How balances work
 - **In Settings**, enter each bank account's and your cash's current balance, and each card's credit limit and amount currently due.

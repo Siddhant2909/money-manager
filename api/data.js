@@ -3,8 +3,8 @@
 // Environment variables
 //   DATABASE_URL (or POSTGRES_URL)  set automatically when Neon Postgres is added in Vercel
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET  required. Google OAuth web client used for sign-in (the only way in).
-//   ALLOWED_EMAILS   optional. Comma-separated Google emails allowed to create an account. If unset, only the
-//                    first account can be created.
+//   ALLOWED_EMAILS   optional. Comma-separated Google emails allowed to create an account. If unset, anyone
+//                    with a Google account can sign up (each user only ever sees their own data).
 //   AUTH_RATE_LIMIT  optional. Sign-in attempts allowed per IP per 10 minutes (default 40).
 //   APP_URL          optional. Public URL of the app (e.g. https://money.example.com), used for the Google
 //                    redirect URI. If unset, it is taken from the request's host.
@@ -413,11 +413,9 @@ async function googleCallback(req, res, url) {
       if (ex.rows.length) {
         await c.query("update mm_users set name = coalesce(name, $2) where email = $1", [email, gname]);
       } else {
-        if (ALLOWED.length) { if (!ALLOWED.includes(email)) throw new ClientError(403, "not_allowed"); }
-        else {
-          const n = await c.query("select count(*)::int as n from mm_users");
-          if (n.rows[0].n > 0) throw new ClientError(403, "closed");
-        }
+        // Anyone with a verified Google account can sign up, unless ALLOWED_EMAILS limits it.
+        // Every query is scoped to the signed-in user, so users never see each other's data.
+        if (ALLOWED.length && !ALLOWED.includes(email)) throw new ClientError(403, "not_allowed");
         // pass_hash is a legacy column from password sign-in; Google accounts don't use it.
         await c.query("insert into mm_users (email, pass_hash, name) values ($1, 'GOOGLE', $2)", [email, gname]);
       }
@@ -448,7 +446,7 @@ module.exports = async function handler(req, res) {
     if (req.method === "GET" && url.pathname === "/auth/google/callback") op = "google_cb";
     if (typeof op !== "string" || op.length > 40) throw bad("Unknown operation");
 
-    if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, google: googleOn(), registrationRestricted: ALLOWED.length > 0 });
+    if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, google: googleOn() });
     if (op === "google" && req.method === "GET") return googleStart(req, res, url);
     if (!DB_URL) return send(res, 503, { error: "Database not connected. Add Neon Postgres to the Vercel project and redeploy." });
     await ensureSchema();
