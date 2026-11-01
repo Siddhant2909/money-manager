@@ -54,7 +54,6 @@ const MM = (() => {
     google_failed: "Couldn't sign in with Google. Please try again.",
     rate: "Too many attempts from this network. Please wait a few minutes and try again.",
     not_allowed: "This Google account's email isn't allowed to use this app.",
-    closed: "There's no account for this Google email, and new accounts are closed.",
   };
   function takeAuthError() {
     const u = new URL(location.href), code = u.searchParams.get("auth_error");
