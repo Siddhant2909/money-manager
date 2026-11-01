@@ -38,7 +38,9 @@ const DATE_RE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
 const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[A-Za-z]{2,}$/;
 const MONEY_RE = /^\d{1,10}(\.\d{1,2})?$/;
 const ID_RE = /^[0-9]{1,18}$/;
-const KINDS = ["expense", "income", "transfer"];
+const KINDS = ["expense", "income", "transfer", "invest"];
+// Investments are their own entry type (not spending). The type is kept in the category column.
+const INVEST_TYPES = ["Mutual fund", "Stocks", "Gold", "FD", "RD", "PPF", "NPS", "Other"];
 const TYPES = ["Need", "Want", "Investment"];
 const SLOTS = [["bank", 1], ["bank", 2], ["card", 1], ["card", 2], ["cash", 1]];
 class ClientError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -102,7 +104,9 @@ async function ensureSchema() {
       await c.query(`alter table mm_expenses add column if not exists kind text not null default 'expense'`);
       await c.query(`alter table mm_expenses add column if not exists account_id bigint`);
       await c.query(`alter table mm_expenses add column if not exists to_account_id bigint`);
-      await c.query(addConstraint("mm_expenses", "mm_exp_kind", "check (kind in ('expense','income','transfer'))"));
+      // v2 of the kind check adds 'invest'.
+      await c.query(`alter table mm_expenses drop constraint if exists mm_exp_kind`);
+      await c.query(addConstraint("mm_expenses", "mm_exp_kind2", "check (kind in ('expense','income','transfer','invest'))"));
       await c.query(addConstraint("mm_expenses", "mm_exp_type_only_expense", "check (kind = 'expense' or type is null)"));
       await c.query(addConstraint("mm_expenses", "mm_exp_to_only_transfer", "check (kind = 'transfer' or to_account_id is null)"));
       await c.query(addConstraint("mm_expenses", "mm_exp_transfer_pair",
@@ -117,7 +121,7 @@ async function ensureSchema() {
       // Recurring payments (rent, maid, SIPs, RDs, salary...). next_due is the date of the next entry to add.
       await c.query(`create table if not exists mm_recurring (
         id bigserial primary key, user_email text not null references mm_users(email) on delete cascade,
-        kind text not null check (kind in ('expense','income','transfer')),
+        kind text not null,
         name text not null check (length(name) between 1 and 120),
         amount numeric(12,2) not null check (amount > 0),
         category text, type text check (type in ('Need','Want','Investment')),
@@ -131,6 +135,8 @@ async function ensureSchema() {
         foreign key (user_email, account_id) references mm_accounts (user_email, id) on delete restrict,
         foreign key (user_email, to_account_id) references mm_accounts (user_email, id) on delete restrict)`);
       await c.query(`create index if not exists mm_recurring_user on mm_recurring (user_email, next_due)`);
+      await c.query(`alter table mm_recurring drop constraint if exists mm_recurring_kind_check`);
+      await c.query(addConstraint("mm_recurring", "mm_rec_kind2", "check (kind in ('expense','income','transfer','invest'))"));
       await c.query(`alter table mm_expenses add column if not exists recurring_id bigint`);
       // Monthly budgets: category null = the overall monthly budget.
       await c.query(`create table if not exists mm_budgets (
@@ -288,6 +294,11 @@ function cleanTxn(row) {
     if (t.type !== null && !TYPES.includes(t.type)) throw bad("Invalid Need/Want/Investment value");
     t.category = text(row.category, 60);
     t.account = id(row.account_id, { optional: true });
+  } else if (kind === "invest") {
+    const typ = INVEST_TYPES.find((x) => x.toLowerCase() === String(row.category || "").trim().toLowerCase());
+    if (!typ) throw bad("Choose the type of investment");
+    t.category = typ;
+    t.account = id(row.account_id, { optional: true });
   } else if (kind === "income") {
     t.category = text(row.category, 60);
     t.account = id(row.account_id, { optional: true });
@@ -378,7 +389,7 @@ async function addTxn(sess, body) {
   // "Repeat every month": save this entry and a recurring payment whose next one is a month later.
   if (!t.account) throw bad("Choose an account");
   const date = t.date || t.month + "-01", day = Number(date.slice(8, 10));
-  const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : "Payment");
+  const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : t.kind === "invest" ? "Investment" : "Payment");
   return tx(async (c) => {
     const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto)
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${REC_COLS}`,
