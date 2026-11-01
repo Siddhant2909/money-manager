@@ -137,11 +137,10 @@ async function ensureSchema() {
       await c.query(`create index if not exists mm_recurring_user on mm_recurring (user_email, next_due)`);
       await c.query(`alter table mm_recurring drop constraint if exists mm_recurring_kind_check`);
       await c.query(addConstraint("mm_recurring", "mm_rec_kind2", "check (kind in ('expense','income','transfer','invest'))"));
-      // How often it repeats: every N days / weeks / months / years (existing ones stay monthly).
+      // How often it repeats: monthly, or every 84 days for the Recharge category (existing ones stay monthly).
       await c.query(`alter table mm_recurring add column if not exists every smallint not null default 1`);
       await c.query(`alter table mm_recurring add column if not exists unit text not null default 'month'`);
-      await c.query(addConstraint("mm_recurring", "mm_rec_interval",
-        "check (unit in ('day','week','month','year') and every >= 1 and every <= case unit when 'day' then 366 when 'week' then 52 when 'month' then 24 else 5 end)"));
+      await c.query(addConstraint("mm_recurring", "mm_rec_interval", "check ((unit = 'month' and every = 1) or (unit = 'day' and every = 84))"));
       await c.query(`alter table mm_expenses add column if not exists recurring_id bigint`);
       // Monthly budgets: category null = the overall monthly budget.
       await c.query(`create table if not exists mm_budgets (
@@ -391,9 +390,9 @@ async function addTxn(sess, body) {
       [sess.email, t.kind, t.month, t.date, t.name, t.amount, t.category, t.type, t.account, t.to]);
     return { row: r.rows[0] };
   }
-  // "Repeat": save this entry and a recurring payment whose next one is one interval later.
+  // "Repeat": save this entry and a recurring payment whose next one is a month later (84 days for a Recharge).
   if (!t.account) throw bad("Choose an account");
-  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10)), iv = isRecharge(t) ? RECHARGE : cleanInterval(body.repeat);
+  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10)), iv = intervalFor(t);
   const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : t.kind === "invest" ? "Investment" : "Payment");
   return tx(async (c) => {
     const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto, every, unit)
@@ -428,29 +427,22 @@ function clampDate(y, m, day) {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${y}-${pad2(m)}-${pad2(Math.min(day, last))}`;
 }
-// The next date after `date` for a schedule: every N days / weeks, or every N months / years on `day`.
+// The next date after `date`: N days later (recharges), or the same day N months later.
 function nextDue(date, { day, every = 1, unit = "month" }) {
   const n = Number(every) || 1;
-  if (unit === "day" || unit === "week") {
+  if (unit === "day") {
     const d = new Date(date + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + n * (unit === "week" ? 7 : 1));
+    d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
   }
-  const months = unit === "year" ? 12 * n : n;
-  const total = Number(date.slice(0, 4)) * 12 + (Number(date.slice(5, 7)) - 1) + months;
+  const total = Number(date.slice(0, 4)) * 12 + (Number(date.slice(5, 7)) - 1) + n;
   return clampDate(Math.floor(total / 12), (total % 12) + 1, Number(day) || Number(date.slice(8, 10)));
 }
-const UNITS = { day: 366, week: 52, month: 24, year: 5 };
-// "Recharge" is a built-in expense category whose recurring payments always repeat every 84 days.
-const RECHARGE = { every: 84, unit: "day" };
+// Recurring payments repeat every month, except the built-in "Recharge" expense category,
+// which always repeats every 84 days.
+const RECHARGE = { every: 84, unit: "day" }, MONTHLY = { every: 1, unit: "month" };
 const isRecharge = (t) => t.kind === "expense" && String(t.category || "").trim().toLowerCase() === "recharge";
-function cleanInterval(src) {
-  const unit = src && src.unit ? String(src.unit) : "month";
-  const every = src && src.every !== undefined && src.every !== null && src.every !== "" ? Number(src.every) : 1;
-  if (!UNITS[unit]) throw bad("Invalid repeat interval");
-  if (!Number.isInteger(every) || every < 1 || every > UNITS[unit]) throw bad(`Repeat every 1 to ${UNITS[unit]} ${unit}s`);
-  return { every, unit };
-}
+const intervalFor = (t) => (isRecharge(t) ? RECHARGE : MONTHLY);
 
 // ---------- recurring payments ----------
 function cleanRecurring(row) {
@@ -462,7 +454,7 @@ function cleanRecurring(row) {
   if (!t.account) throw bad("Choose an account");
   const day = row.day === undefined || row.day === null || row.day === "" ? Number(due.slice(8, 10)) : Number(row.day);
   if (!Number.isInteger(day) || day < 1 || day > 31) throw bad("Invalid day of the month");
-  return { ...t, next_due: due, day, auto: row.auto !== false, ...(isRecharge(t) ? RECHARGE : cleanInterval(row)) };
+  return { ...t, next_due: due, day, auto: row.auto !== false, ...intervalFor(t) };
 }
 async function saveRecurring(sess, body) {
   const r = cleanRecurring(body.row);
