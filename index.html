@@ -83,7 +83,8 @@
   .authcard .brand { margin-bottom: 22px; }
   .authcard p { margin: 0 0 16px; }
   .stack > * + * { margin-top: 14px; }
-  .gbtn { min-height: 44px; display: flex; justify-content: center; }
+  .row { display: flex; gap: 10px; }
+  .row > .btn { flex: 1; }
 
   /* ---------- App shell ---------- */
   header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
@@ -245,9 +246,14 @@
   <section id="auth" class="center hidden">
     <div class="card authcard stack">
       <div class="brand"><div class="logo">₹</div><div><h1>Money Manager</h1><small>Track every rupee, every month</small></div></div>
-      <p class="muted" id="authHint">Sign in with your Google account to continue.</p>
-      <div id="gbtn" class="gbtn"></div>
+      <p class="muted" id="authHint">Sign in with your email and password.</p>
+      <div><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com"></div>
+      <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters"></div>
       <div class="err" id="authErr"></div>
+      <div class="row">
+        <button class="btn primary" id="signIn">Sign in</button>
+        <button class="btn ghost" id="signUp">Create account</button>
+      </div>
     </div>
   </section>
 
@@ -346,7 +352,6 @@
 </main>
 <div class="toast" id="toast"><svg class="i"><use href="#i-check"/></svg><span id="toastMsg"></span></div>
 
-<script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -371,8 +376,8 @@ const shortDate = (d) => d ? `${d.slice(8, 10)} ${MON[+d.slice(5, 7) - 1]}` : ""
 const catKey = (c) => (c || "").trim().toLowerCase();
 const isInv = (e) => e.type === "Investment";
 
-let toastTimer = null, googleReady = false;
-const state = { email: null, clientId: null, expenses: [], salaries: {}, month: thisMonth(), editing: null, charts: {} };
+let toastTimer = null;
+const state = { email: null, expenses: [], salaries: {}, month: thisMonth(), editing: null, charts: {} };
 
 function show(id) { for (const s of ["auth", "app"]) $(s).classList.toggle("hidden", s !== id); }
 function toast(msg) {
@@ -388,7 +393,7 @@ async function api(op, body) {
     : { credentials: "same-origin" });
   let data = {};
   try { data = await r.json(); } catch {}
-  if (r.status === 401 && op !== "login") { signedOut("Your session ended. Please sign in again."); throw new Error("Please sign in."); }
+  if (r.status === 401 && op !== "login" && op !== "signup") { signedOut("Your session ended. Please sign in again."); throw new Error("Please sign in."); }
   if (!r.ok) throw new Error(data.error || "Request failed (" + r.status + ")");
   return data;
 }
@@ -649,37 +654,28 @@ async function enterApp(email) {
 }
 function signedOut(msg) {
   state.email = null; state.expenses = []; state.salaries = {};
-  show("auth"); $("authErr").textContent = msg || "";
-  renderGoogleButton();
+  show("auth"); $("authErr").textContent = msg || ""; $("password").value = "";
 }
-function renderGoogleButton() {
-  if (!state.clientId) return;
-  const tryInit = (n) => {
-    if (!(window.google && google.accounts && google.accounts.id)) {
-      if (n > 100) { $("authErr").textContent = "Could not load Google Sign-In. Check your connection and reload."; return; }
-      return setTimeout(() => tryInit(n + 1), 100);
-    }
-    if (!googleReady) {
-      google.accounts.id.initialize({ client_id: state.clientId, callback: onGoogleCredential, auto_select: false, cancel_on_tap_outside: true });
-      googleReady = true;
-    }
-    $("gbtn").innerHTML = "";
-    google.accounts.id.renderButton($("gbtn"), { theme: "filled_black", size: "large", shape: "pill", text: "signin_with", width: 280 });
-  };
-  tryInit(0);
-}
-async function onGoogleCredential(resp) {
+async function authAction(kind) {
+  const email = $("email").value.trim(), password = $("password").value;
   $("authErr").textContent = "";
+  if (!email || !password) { $("authErr").textContent = "Enter your email and password."; return; }
+  if (kind === "signup" && password.length < 8) { $("authErr").textContent = "Use a password of at least 8 characters."; return; }
+  $("signIn").disabled = $("signUp").disabled = true;
   try {
-    const { email } = await api("login", { credential: resp.credential });
-    enterApp(email);
+    const r = await api(kind, { email, password });
+    $("password").value = "";
+    enterApp(r.email);
   } catch (e) { $("authErr").textContent = e.message; }
+  finally { $("signIn").disabled = $("signUp").disabled = false; }
 }
 
 function wire() {
+  $("signIn").onclick = () => authAction("login");
+  $("signUp").onclick = () => authAction("signup");
+  $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") authAction("login"); });
   $("signOut").onclick = async () => {
     try { await api("logout", {}); } catch {}
-    try { google.accounts.id.disableAutoSelect(); } catch {}
     signedOut();
   };
   document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
@@ -704,15 +700,12 @@ function wire() {
 async function start() {
   try {
     const cfg = await api("config");
-    if (!cfg.db || !cfg.googleClientId || !cfg.allowList) {
+    if (!cfg.db) {
       show("auth");
       $("authHint").textContent = "Setup is not finished.";
-      $("authErr").textContent = [!cfg.db && "Connect Neon Postgres to the Vercel project.",
-        !cfg.googleClientId && "Set GOOGLE_CLIENT_ID in Vercel.", !cfg.allowList && "Set ALLOWED_EMAILS in Vercel."]
-        .filter(Boolean).join(" ") + " Then redeploy.";
+      $("authErr").textContent = "Connect Neon Postgres to the Vercel project, then redeploy.";
       return;
     }
-    state.clientId = cfg.googleClientId;
     const s = await api("session");
     if (s.authenticated) enterApp(s.email); else signedOut();
   } catch (e) { show("auth"); $("authErr").textContent = "Could not reach the server: " + e.message; }
