@@ -448,7 +448,7 @@
   function openSettings() {
     renderSettings();
     $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); $("pfErr").textContent = "";
-    for (const b of document.querySelectorAll(".tabs button")) b.classList.remove("active");
+    document.querySelector(".tabs").classList.add("hidden");  // Settings is its own page; Back returns to the tabs
     showView("settingsView"); window.scrollTo({ top: 0 });
   }
   function renderSettings() {
