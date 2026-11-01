@@ -433,6 +433,8 @@
     $("lblDate").textContent = rec ? "Next due on" : "Date";
     $("repeatRow").classList.toggle("hidden", rec || !!state.editing);
     $("autoRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
+    $("everyRow").dataset.off = rec || $("fRepeat").checked ? "" : "1";
+    showRechargeNote();
     $("fPresets").classList.toggle("hidden", !rec || !!state.editingRec);
     const curAcc = $("fAcc").value || (editRow ? editRow.account_id : "");
     $("fAcc").innerHTML = accountOptions(() => true, curAcc, unlinked);
@@ -442,7 +444,7 @@
     const to = $("fTo").value || (editRow && editRow.kind === "transfer" ? editRow.to_account_id : "");
     $("fTo").innerHTML = accountOptions((a) => a.id !== $("fFrom").value, to === $("fFrom").value ? "" : to, false);
     const pool = state.txns.filter((t) => kind === "income" ? t.kind === "income" : t.kind === "expense" && (isInvest ? t.type === "Investment" : t.type !== "Investment"));
-    const sugg = distinct(pool.map((t) => t.category).concat(kind === "income" ? ["Salary"] : []));
+    const sugg = distinct(pool.map((t) => t.category).concat(kind === "income" ? ["Salary"] : kind === "expense" && !isInvest ? ["Recharge"] : []));
     $("catList").innerHTML = sugg.map((c) => `<option value="${esc(c)}">`).join("");
   }
   function readForm() {
@@ -504,6 +506,7 @@
     $("formTitle").textContent = r ? "Edit entry" : "New entry";
     $("fSave").querySelector("span").textContent = r ? "Save changes" : "Add entry";
     $("fDelete").classList.toggle("hidden", !r);
+    showRechargeNote();
     $("entryDlg").showModal();
     if (!r) $("fAmt").focus();
   }
@@ -516,6 +519,7 @@
     sub: { kind: "expense", name: "Subscription", category: "Subscriptions", type: "Want" },
     emi: { kind: "expense", name: "Loan EMI", category: "EMI", type: "Need" },
     salary: { kind: "income", name: "Salary", category: "Salary" },
+    recharge: { kind: "expense", name: "Mobile recharge", category: "Recharge", type: "Need" },
   };
   // The entry form doubles as the recurring-payment form.
   function openRecurring(idv) {
@@ -542,6 +546,7 @@
     $("formTitle").textContent = r ? "Edit recurring payment" : "New recurring payment";
     $("fSave").querySelector("span").textContent = r ? "Save changes" : "Save";
     $("fDelete").classList.toggle("hidden", !r);
+    showRechargeNote();
     $("entryDlg").showModal();
   }
   function applyPreset(key) {
@@ -553,8 +558,20 @@
     if (!$("fAcc").value) { const def = (sortedAccounts().find((a) => a.kind === "bank") || {}).id; if (def) $("fAcc").value = def; }
     $("fName").value = p.name;
     if (p.kind === "invest") { setInvType(p.category); $("fCat").value = ""; } else $("fCat").value = p.category;
+    showRechargeNote();
     $("fAmt").focus();
   }
+  // ----- recharges repeat every 84 days; everything else monthly -----
+  const isRechargeForm = () => state.kind === "expense" && catKey($("fCat").value) === "recharge";
+  function showRechargeNote() {
+    const show = !$("everyRow").dataset.off && isRechargeForm();
+    $("everyRow").classList.toggle("hidden", !show);
+    $("autoSub").textContent = `Added on its date each ${isRechargeForm() ? "time" : "month"}. Turn off to confirm it yourself.`;
+  }
+  // "5th of every month", or "Every 84 days" for a recharge.
+  const schedText = (r) => (r.unit === "day" ? `Every ${r.every} days` : `${ordinal(r.day)} of every month`);
+  // Amount per month (an 84-day recharge ≈ 0.36 of its price a month).
+  const perMonth = (r) => (r.unit === "day" ? (r.amount * 30.44) / r.every : r.amount);
   function sizeAmount() { const i = $("fAmt"); i.style.width = Math.max(1, (i.value || i.placeholder).length) + 0.6 + "ch"; }
   function closeEntry() { $("entryDlg").close(); state.editing = null; state.editingRow = null; state.editingRec = null; }
   async function saveEntry(e) {
@@ -585,7 +602,7 @@
         state.txns.push(res.row);
         if (res.recurring) state.recurring.push(res.recurring);
         if (row.kind !== "transfer" && row.account_id) lastAcc = row.account_id;
-        toast(res.recurring ? `Entry added · repeats on the ${ordinal(res.recurring.day)}` : "Entry added");
+        toast(res.recurring ? (res.recurring.unit === "day" ? `Entry added · repeats every ${res.recurring.every} days` : `Entry added · repeats on the ${ordinal(res.recurring.day)}`) : "Entry added");
       }
       closeEntry();
       renderCurrent();
@@ -654,14 +671,16 @@
       const acc = r.kind === "transfer" ? `${accName(r.account_id)} → ${accName(r.to_account_id)}` : accName(r.account_id);
       const sign = r.kind === "income" ? "+" : r.kind === "expense" ? "−" : "";
       return `<button type="button" class="row" data-rec="${esc(r.id)}">${entryIcon(r.kind, r.category || r.name)}
-        <span class="r-main"><span class="r-title">${esc(r.name)}</span><span class="r-sub">${esc(ordinal(r.day))} of every month · ${esc(acc)}${r.auto ? "" : " · confirm"}</span></span>
+        <span class="r-main"><span class="r-title">${esc(r.name)}</span><span class="r-sub">${esc(schedText(r))} · ${esc(acc)}${r.auto ? "" : " · confirm"}</span></span>
         <span class="r-val"><span class="r-amt${r.kind === "income" ? " pos" : ""}">${sign}${esc(fmt0(r.amount))}</span><span class="r-sub">next ${esc(shortD(r.next_due))}</span></span>
       </button>`;
     }).join("") : `<div class="rows-empty">Nothing yet. Add rent, your maid or cook, SIPs, RDs and subscriptions once, and they're added for you every month.</div>`;
-    const sum = (f) => state.recurring.filter(f).reduce((s, r) => s + r.amount, 0);
+    const sum = (f) => state.recurring.filter(f).reduce((s, r) => s + perMonth(r), 0);
     const out = sum((r) => r.kind === "expense" && r.type !== "Investment"), ivs = sum(isInv), inc = sum((r) => r.kind === "income");
     const parts = [out ? `${fmt0(out)} goes out` : "", ivs ? `${fmt0(ivs)} is invested` : "", inc ? `${fmt0(inc)} comes in` : ""].filter(Boolean);
-    $("recNote").textContent = parts.length ? parts.join(", ").replace(/, ([^,]*)$/, " and $1") + " every month through recurring payments." : "";
+    const allMonthly = state.recurring.every((r) => r.unit !== "day");
+    const list = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+    $("recNote").textContent = parts.length ? (allMonthly ? "" : "About ") + list + " each month through recurring payments." : "";
     applyBars($("tab-plan"));
   }
 
@@ -1104,6 +1123,7 @@
     $("ovRange").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.r !== ovRange) { ovRange = b.dataset.r; renderDashboard(); } });
     $("invGroups").addEventListener("click", (e) => { const b = e.target.closest("[data-edit]"); if (b) openEntry(b.dataset.edit); });
     $("fRepeat").addEventListener("change", refreshFormFields);
+    $("fCat").addEventListener("input", showRechargeNote);
     $("fPresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyPreset(b.dataset.p); });
     // plan
     $("pPrev").addEventListener("click", () => { setMonth(shiftMonth(state.month, -1)); renderPlan(); });

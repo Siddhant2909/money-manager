@@ -272,6 +272,8 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .opt > span { flex: 1; display: flex; flex-direction: column; }
 .opt-t { font-weight: 550; }
 .opt-s { font-size: 12.5px; color: var(--muted); }
+.every-opt { cursor: default; padding-top: 10px; padding-bottom: 10px; }
+.every-note { color: var(--amber) !important; }
 .presets, .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .chips { margin: 12px 0 0; }
 .presets button, .chips button { border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); border-radius: 999px;

@@ -273,7 +273,7 @@
     <div class="presets hidden" id="fPresets" aria-label="Quick fill">
       <button type="button" data-p="rent">Rent</button><button type="button" data-p="maid">Maid</button><button type="button" data-p="cook">Cook</button>
       <button type="button" data-p="sip">SIP</button><button type="button" data-p="rd">RD</button><button type="button" data-p="sub">Subscription</button>
-      <button type="button" data-p="emi">EMI</button><button type="button" data-p="salary">Salary</button>
+      <button type="button" data-p="recharge">Recharge</button><button type="button" data-p="emi">EMI</button><button type="button" data-p="salary">Salary</button>
     </div>
     <div class="seg full" id="fKind" role="radiogroup" aria-label="Entry type">
       <button type="button" data-k="expense" class="on">Expense</button>
@@ -297,9 +297,12 @@
     <datalist id="invNames"></datalist>
     <div class="opts">
       <label class="opt" id="repeatRow" for="fRepeat">
-        <span><span class="opt-t">Repeat every month</span><span class="opt-s">For rent, SIPs, subscriptions and other regular payments</span></span>
+        <span><span class="opt-t">Repeat every month</span><span class="opt-s">For rent, SIPs, subscriptions and other regular payments. Recharges repeat every 84 days.</span></span>
         <input type="checkbox" class="switch" id="fRepeat">
       </label>
+      <div class="opt every-opt hidden" id="everyRow">
+        <span class="opt-s every-note">Recharges always repeat every 84 days.</span>
+      </div>
       <label class="opt hidden" id="autoRow" for="fAuto">
         <span><span class="opt-t">Add automatically</span><span class="opt-s" id="autoSub">Added on its date each month. Turn off to confirm it yourself.</span></span>
         <input type="checkbox" class="switch" id="fAuto" checked>

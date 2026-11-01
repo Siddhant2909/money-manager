@@ -72,11 +72,13 @@ The lock is set per device and is a privacy screen. The PIN never leaves the dev
 ## Budgets and recurring payments
 - **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.
 - **Category budgets:** split the monthly budget by category (e.g. Groceries ₹8,000). Each one tracks the expenses in that category. Category names match the categories on your entries, ignoring capitals. Budgets apply to every month until you change them.
-- **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions or salary once, with the date it's next due.
-  - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any missed months.
-  - Turn off **Add automatically** to confirm each month yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
-  - To make an existing entry repeat, turn on **Repeat every month** when adding it.
+- **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions, mobile recharges or salary once, with the date it's next due.
+  - They repeat every month on the same date. The exception is **Recharge**, a built-in expense category: recurring payments in it always repeat every **84 days**, which the server enforces. The **Recharge** quick-fill uses it.
+  - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any it missed.
+  - Turn off **Add automatically** to confirm each one yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
+  - To make an existing entry repeat, turn on **Repeat every month** when adding it. A Recharge entry repeats every 84 days instead.
   - A payment due on the 29th, 30th or 31st moves to the last day of shorter months.
+  - The total under the list is per month, so an 84-day recharge counts as about a third of its price.
   - Deleting a recurring payment keeps the entries it already added.
 
 ## How balances work
