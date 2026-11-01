@@ -114,6 +114,29 @@ async function ensureSchema() {
       await c.query(`create index if not exists mm_expenses_user_month on mm_expenses (user_email, month)`);
       await c.query(`create index if not exists mm_expenses_account on mm_expenses (user_email, account_id)`);
       await c.query(`create index if not exists mm_expenses_to_account on mm_expenses (user_email, to_account_id)`);
+      // Recurring payments (rent, maid, SIPs, RDs, salary...). next_due is the date of the next entry to add.
+      await c.query(`create table if not exists mm_recurring (
+        id bigserial primary key, user_email text not null references mm_users(email) on delete cascade,
+        kind text not null check (kind in ('expense','income','transfer')),
+        name text not null check (length(name) between 1 and 120),
+        amount numeric(12,2) not null check (amount > 0),
+        category text, type text check (type in ('Need','Want','Investment')),
+        account_id bigint, to_account_id bigint,
+        day smallint not null check (day between 1 and 31),
+        next_due date not null, auto boolean not null default true,
+        created_at timestamptz not null default now(),
+        check (kind = 'expense' or type is null),
+        check (kind = 'transfer' or to_account_id is null),
+        check (kind <> 'transfer' or (account_id is not null and to_account_id is not null and account_id <> to_account_id)),
+        foreign key (user_email, account_id) references mm_accounts (user_email, id) on delete restrict,
+        foreign key (user_email, to_account_id) references mm_accounts (user_email, id) on delete restrict)`);
+      await c.query(`create index if not exists mm_recurring_user on mm_recurring (user_email, next_due)`);
+      await c.query(`alter table mm_expenses add column if not exists recurring_id bigint`);
+      // Monthly budgets: category null = the overall monthly budget.
+      await c.query(`create table if not exists mm_budgets (
+        id bigserial primary key, user_email text not null references mm_users(email) on delete cascade,
+        category text, amount numeric(12,2) not null check (amount > 0))`);
+      await c.query(`create unique index if not exists mm_budgets_cat on mm_budgets (user_email, (lower(coalesce(category, ''))))`);
       // One-time upgrade: earlier versions stored salary per month; turn each into an Income entry.
       await c.query(`create table if not exists mm_salaries (user_email text not null, month text not null,
         amount numeric(12,2) not null default 0, primary key (user_email, month))`);
@@ -301,7 +324,13 @@ async function getSession(req) {
 // ---------- operations ----------
 const ACC_COLS = `id::text as id, kind, slot, name, opening_balance::float8 as opening_balance, credit_limit::float8 as credit_limit`;
 const TXN_COLS = `id::text as id, kind, month, to_char(expense_date, 'YYYY-MM-DD') as expense_date, name, amount::float8 as amount,
-  category, type, account_id::text as account_id, to_account_id::text as to_account_id, created_at`;
+  category, type, account_id::text as account_id, to_account_id::text as to_account_id, recurring_id::text as recurring_id, created_at`;
+const REC_COLS = `id::text as id, kind, name, amount::float8 as amount, category, type, account_id::text as account_id,
+  to_account_id::text as to_account_id, day, to_char(next_due, 'YYYY-MM-DD') as next_due, auto`;
+// Same row, with the amount as exact text, for copying into entries.
+const REC_RAW = `id::text as id, kind, name, amount::text as amount, category, type, account_id::text as account_id,
+  to_account_id::text as to_account_id, day, to_char(next_due, 'YYYY-MM-DD') as next_due`;
+const BUD_COLS = `id::text as id, category, amount::float8 as amount`;
 
 async function saveAccounts(sess, body) {
   const accounts = cleanAccounts(body.accounts);
@@ -317,6 +346,9 @@ async function saveAccounts(sess, body) {
       const used = await c.query(`select a.name from mm_accounts a where a.user_email = $1 and a.kind = $2 and a.slot = $3
         and exists (select 1 from mm_expenses e where e.user_email = $1 and (e.account_id = a.id or e.to_account_id = a.id))`, [sess.email, kind, slot]);
       if (used.rows.length) throw new ClientError(409, `"${used.rows[0].name}" has entries, so it can't be removed. Move or delete those entries first.`);
+      const rec = await c.query(`select a.name from mm_accounts a where a.user_email = $1 and a.kind = $2 and a.slot = $3
+        and exists (select 1 from mm_recurring r where r.user_email = $1 and (r.account_id = a.id or r.to_account_id = a.id))`, [sess.email, kind, slot]);
+      if (rec.rows.length) throw new ClientError(409, `"${rec.rows[0].name}" is used by a recurring payment, so it can't be removed. Change or delete that first.`);
       await c.query(`delete from mm_accounts where user_email = $1 and kind = $2 and slot = $3`, [sess.email, kind, slot]);
     }
     const r = await c.query(`select ${ACC_COLS} from mm_accounts where user_email = $1 order by kind, slot`, [sess.email]);
@@ -337,10 +369,25 @@ async function checkTxnAccounts(email, t, existing) {
 async function addTxn(sess, body) {
   const t = cleanTxn(body.row);
   await checkTxnAccounts(sess.email, t, null);
-  const r = await q(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id)
-    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning ${TXN_COLS}`,
-    [sess.email, t.kind, t.month, t.date, t.name, t.amount, t.category, t.type, t.account, t.to]);
-  return r.rows[0];
+  if (!body.repeat) {
+    const r = await q(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning ${TXN_COLS}`,
+      [sess.email, t.kind, t.month, t.date, t.name, t.amount, t.category, t.type, t.account, t.to]);
+    return { row: r.rows[0] };
+  }
+  // "Repeat every month": save this entry and a recurring payment whose next one is a month later.
+  if (!t.account) throw bad("Choose an account");
+  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10));
+  const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : "Payment");
+  return tx(async (c) => {
+    const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${REC_COLS}`,
+      [sess.email, t.kind, name, t.amount, t.category, t.type, t.account, t.to, day, nextMonthDate(date, day), body.repeat.auto !== false]);
+    const r = await c.query(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id, recurring_id)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${TXN_COLS}`,
+      [sess.email, t.kind, t.month, date, t.name, t.amount, t.category, t.type, t.account, t.to, rec.rows[0].id]);
+    return { row: r.rows[0], recurring: rec.rows[0] };
+  });
 }
 async function updateTxn(sess, body) {
   const txnId = id(body.id);
@@ -352,6 +399,111 @@ async function updateTxn(sess, body) {
     where id = $1::bigint and user_email = $2 returning ${TXN_COLS}`,
     [txnId, sess.email, t.kind, t.month, t.date, t.name, t.amount, t.category, t.type, t.account, t.to]);
   return r.rows[0];
+}
+
+// ---------- dates in India Standard Time ----------
+const pad2 = (n) => String(n).padStart(2, "0");
+function istNow() {
+  const d = new Date(Date.now() + 330 * 60000);   // IST is UTC+5:30 all year
+  return { date: d.toISOString().slice(0, 10) };
+}
+// The given day of a month, moved back to the month's last day if needed (31 → 30 Apr, 28/29 Feb).
+function clampDate(y, m, day) {
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${y}-${pad2(m)}-${pad2(Math.min(day, last))}`;
+}
+function nextMonthDate(date, day) {
+  let y = Number(date.slice(0, 4)), m = Number(date.slice(5, 7)) + 1;
+  if (m > 12) { m = 1; y += 1; }
+  return clampDate(y, m, day);
+}
+
+// ---------- recurring payments ----------
+function cleanRecurring(row) {
+  if (!row || typeof row !== "object") throw bad("Missing recurring payment");
+  const due = String(row.next_due || "");
+  if (!DATE_RE.test(due)) throw bad("Choose the next due date");
+  const t = cleanTxn({ ...row, month: due.slice(0, 7), expense_date: due });
+  if (!t.name) throw bad("Give it a name, e.g. Rent");
+  if (!t.account) throw bad("Choose an account");
+  const day = row.day === undefined || row.day === null || row.day === "" ? Number(due.slice(8, 10)) : Number(row.day);
+  if (!Number.isInteger(day) || day < 1 || day > 31) throw bad("Invalid day of the month");
+  return { ...t, next_due: due, day, auto: row.auto !== false };
+}
+async function saveRecurring(sess, body) {
+  const r = cleanRecurring(body.row);
+  await checkTxnAccounts(sess.email, { kind: r.kind, account: r.account, to: r.to }, null);
+  const vals = [sess.email, r.kind, r.name, r.amount, r.category, r.type, r.account, r.to, r.day, r.next_due, r.auto];
+  if (body.id) {
+    const u = await q(`update mm_recurring set kind=$2, name=$3, amount=$4, category=$5, type=$6, account_id=$7, to_account_id=$8, day=$9, next_due=$10, auto=$11
+      where user_email = $1 and id = $12::bigint returning ${REC_COLS}`, [...vals, id(body.id)]);
+    if (!u.rows.length) throw new ClientError(404, "Recurring payment not found");
+    return u.rows[0];
+  }
+  const n = await q(`select count(*)::int as n from mm_recurring where user_email = $1`, [sess.email]);
+  if (n.rows[0].n >= 100) throw bad("You can have up to 100 recurring payments");
+  const ins = await q(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto)
+    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${REC_COLS}`, vals);
+  return ins.rows[0];
+}
+// Adds the entry for a recurring payment's next due date, then moves next_due on a month.
+async function postOccurrence(c, email, r, date) {
+  const d = date || r.next_due;
+  const e = await c.query(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id, recurring_id)
+    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${TXN_COLS}`,
+    [email, r.kind, d.slice(0, 7), d, r.name, r.amount, r.category, r.type, r.account_id, r.to_account_id, r.id]);
+  await advance(c, email, r);
+  return e.rows[0];
+}
+async function advance(c, email, r) {
+  r.next_due = nextMonthDate(r.next_due, Number(r.day));
+  await c.query(`update mm_recurring set next_due = $3 where user_email = $1 and id = $2::bigint`, [email, r.id, r.next_due]);
+}
+// Automatic ones are added when their day comes (checked whenever the app loads), catching up on missed months.
+async function postDueRecurring(email) {
+  const today = istNow().date;
+  const due = await q(`select 1 from mm_recurring where user_email = $1 and auto and next_due <= $2::date limit 1`, [email, today]);
+  if (!due.rows.length) return;
+  await tx(async (c) => {
+    const rs = await c.query(`select ${REC_RAW} from mm_recurring where user_email = $1 and auto and next_due <= $2::date for update`, [email, today]);
+    for (const r of rs.rows) for (let i = 0; i < 24 && r.next_due <= today; i++) await postOccurrence(c, email, r);
+  });
+}
+async function recurringStep(sess, body, post) {
+  return tx(async (c) => {
+    const rs = await c.query(`select ${REC_RAW} from mm_recurring where user_email = $1 and id = $2::bigint for update`, [sess.email, id(body.id)]);
+    if (!rs.rows.length) throw new ClientError(404, "Recurring payment not found");
+    const r = rs.rows[0];
+    // Confirmed early in the same month? Then it was paid today, so date it today.
+    const today = istNow().date;
+    const date = r.next_due > today && r.next_due.slice(0, 7) === today.slice(0, 7) ? today : r.next_due;
+    const row = post ? await postOccurrence(c, sess.email, r, date) : (await advance(c, sess.email, r), null);
+    const out = await c.query(`select ${REC_COLS} from mm_recurring where user_email = $1 and id = $2::bigint`, [sess.email, r.id]);
+    return { row, recurring: out.rows[0] };
+  });
+}
+
+// ---------- budgets ----------
+async function saveBudget(sess, body) {
+  const category = body.category === null || body.category === undefined || body.category === "" ? null : text(body.category, 60);
+  const amount = money(body.amount);
+  try {
+    if (body.id) {
+      const u = await q(`update mm_budgets set category = $3, amount = $4 where user_email = $1 and id = $2::bigint returning ${BUD_COLS}`,
+        [sess.email, id(body.id), category, amount]);
+      if (!u.rows.length) throw new ClientError(404, "Budget not found");
+      return u.rows[0];
+    }
+    const n = await q(`select count(*)::int as n from mm_budgets where user_email = $1`, [sess.email]);
+    if (n.rows[0].n >= 60) throw bad("You can have up to 60 budgets");
+    const r = await q(`insert into mm_budgets (user_email, category, amount) values ($1, $2, $3)
+      on conflict (user_email, (lower(coalesce(category, '')))) do update set amount = excluded.amount, category = excluded.category
+      returning ${BUD_COLS}`, [sess.email, category, amount]);
+    return r.rows[0];
+  } catch (e) {
+    if (e && e.code === "23505") throw new ClientError(409, `There's already a budget for ${category || "the month"}.`);
+    throw e;
+  }
 }
 
 // ---------- Google sign-in (OAuth 2.0 authorization code flow with PKCE) ----------
@@ -464,9 +616,14 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === "GET" && op === "all") {
-      const acc = await q(`select ${ACC_COLS} from mm_accounts where user_email = $1 order by kind, slot`, [sess.email]);
-      const txs = await q(`select ${TXN_COLS} from mm_expenses where user_email = $1 order by created_at, id`, [sess.email]);
-      return send(res, 200, { accounts: acc.rows, transactions: txs.rows });
+      await postDueRecurring(sess.email);
+      const [acc, txs, rec, bud] = await Promise.all([
+        q(`select ${ACC_COLS} from mm_accounts where user_email = $1 order by kind, slot`, [sess.email]),
+        q(`select ${TXN_COLS} from mm_expenses where user_email = $1 order by created_at, id`, [sess.email]),
+        q(`select ${REC_COLS} from mm_recurring where user_email = $1 order by day, id`, [sess.email]),
+        q(`select ${BUD_COLS} from mm_budgets where user_email = $1 order by category nulls first, id`, [sess.email]),
+      ]);
+      return send(res, 200, { accounts: acc.rows, transactions: txs.rows, recurring: rec.rows, budgets: bud.rows, today: istNow().date });
     }
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
 
@@ -480,10 +637,20 @@ module.exports = async function handler(req, res) {
         return send(res, 200, { name });
       }
       case "saveAccounts": return send(res, 200, { accounts: await saveAccounts(sess, body) });
-      case "addTxn": return send(res, 200, { row: await addTxn(sess, body) });
+      case "addTxn": return send(res, 200, await addTxn(sess, body));
       case "updateTxn": return send(res, 200, { row: await updateTxn(sess, body) });
       case "deleteTxn":
         await q(`delete from mm_expenses where id = $1::bigint and user_email = $2`, [id(body.id), sess.email]);
+        return send(res, 200, { ok: true });
+      case "saveRecurring": return send(res, 200, { recurring: await saveRecurring(sess, body) });
+      case "deleteRecurring":
+        await q(`delete from mm_recurring where id = $1::bigint and user_email = $2`, [id(body.id), sess.email]);
+        return send(res, 200, { ok: true });
+      case "postRecurring": return send(res, 200, await recurringStep(sess, body, true));
+      case "skipRecurring": return send(res, 200, await recurringStep(sess, body, false));
+      case "saveBudget": return send(res, 200, { budget: await saveBudget(sess, body) });
+      case "deleteBudget":
+        await q(`delete from mm_budgets where id = $1::bigint and user_email = $2`, [id(body.id), sess.email]);
         return send(res, 200, { ok: true });
       default: throw bad("Unknown operation");
     }

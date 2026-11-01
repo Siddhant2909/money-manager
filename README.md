@@ -5,6 +5,7 @@ A personal finance web app with these pages:
 - **Sign in:** a single **Continue with Google** button. There are no passwords and no registration form. The first time you continue with Google, your account is created.
 - **Monthly** (the home page): the month's entries, grouped by day, with search and a type filter. **Add entry** opens a form; click any entry to edit or delete it. Account balances for the month are in a collapsible section below. On desktop, press `N` to add an entry.
 - **Overview:** totals, account balances, charts and a month-by-month table.
+- **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
 - **Investments:** where you've invested.
 - **Settings** (click your name, top right): your profile, your accounts and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
 
@@ -15,6 +16,7 @@ The design is dark. It runs on Vercel, with a Neon Postgres database.
 ```
 money-manager/
 ├── index.html            sign-in page and the app
+├── manifest.webmanifest  lets phones install the app on the home screen
 ├── styles.css            design (dark)
 ├── favicon.svg           logo / browser icon
 ├── apple-touch-icon.png  icon when added to a phone's home screen
@@ -26,7 +28,8 @@ money-manager/
 ├── vendor/
 │   └── chart.umd.min.js  Chart.js 4.5.1 (hosted locally, MIT licence)
 └── api/
-    └── data.js           server API: Google sign-in, sessions, accounts, entries
+    └── data.js           server API: Google sign-in, sessions, accounts, entries, budgets and
+                          recurring payments
 ```
 
 ## Setup
@@ -54,6 +57,16 @@ Optional settings:
 **Who can create an account:** anyone with a Google account. Each person gets their own accounts and entries, and nobody can see anyone else's data. To limit sign-up to specific people, set `ALLOWED_EMAILS` (comma-separated), then redeploy. A Google account whose email matches an existing account always signs in to that account, and that account's data is kept.
 
 If your Google OAuth consent screen is still in **Testing**, Google only lets the test users you listed sign in. To let anyone sign in, open **Google Auth Platform → Audience** and click **Publish app**. For basic sign-in (name and email), Google doesn't require a review.
+
+## Budgets and recurring payments
+- **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.
+- **Category budgets:** split the monthly budget by category (e.g. Groceries ₹8,000). Each one tracks the expenses in that category. Category names match the categories on your entries, ignoring capitals. Budgets apply to every month until you change them.
+- **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions or salary once, with the date it's next due.
+  - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any missed months.
+  - Turn off **Add automatically** to confirm each month yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
+  - To make an existing entry repeat, turn on **Repeat every month** when adding it.
+  - A payment due on the 29th, 30th or 31st moves to the last day of shorter months.
+  - Deleting a recurring payment keeps the entries it already added.
 
 ## How balances work
 - **In Settings**, enter each bank account's and your cash's current balance, and each card's credit limit and amount currently due.
