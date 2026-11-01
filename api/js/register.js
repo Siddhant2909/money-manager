@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const { $, api, accountsForm, passwordProblem } = MM;
+  $("boot").classList.add("hidden"); $("regView").classList.remove("hidden");
   const form = accountsForm($("accForm"), [], "register");
 
   // Already signed in? Go to the app.

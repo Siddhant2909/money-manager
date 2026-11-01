@@ -8,7 +8,7 @@
 
   // ---------- views ----------
   const VIEWS = ["setupView", "tab-dashboard", "tab-monthly", "tab-investment", "settingsView"];
-  function showPage(id) { $("loginView").classList.toggle("hidden", id !== "login"); $("appView").classList.toggle("hidden", id !== "app"); }
+  function showPage(id) { $("boot").classList.add("hidden"); $("loginView").classList.toggle("hidden", id !== "login"); $("appView").classList.toggle("hidden", id !== "app"); }
   function showView(id) { for (const v of VIEWS) $(v).classList.toggle("hidden", v !== id); $("loader").classList.add("hidden"); }
 
   // ---------- accounts & balances ----------
