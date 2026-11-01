@@ -6,8 +6,6 @@
 //   ALLOWED_EMAILS   optional. Comma-separated Google emails allowed to create an account. If unset, anyone
 //                    with a Google account can sign up (each user only ever sees their own data).
 //   AUTH_RATE_LIMIT  optional. Sign-in attempts allowed per IP per 10 minutes (default 40).
-//   CRON_SECRET      optional. Turns on daily reminders: a scheduler (e.g. cron-job.org) calls
-//                    /api/data?op=cron&key=<CRON_SECRET> every 15 minutes.
 //   APP_URL          optional. Public URL of the app (e.g. https://money.example.com), used for the Google
 //                    redirect URI. If unset, it is taken from the request's host.
 //
@@ -35,7 +33,6 @@ const MAX_BODY = 64 * 1024;
 const G_ID = process.env.GOOGLE_CLIENT_ID || "", G_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const googleOn = () => !!(G_ID && G_SECRET);
 
-const CRON_SECRET = process.env.CRON_SECRET || "";
 const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 const MONTH_RE = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 const DATE_RE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
@@ -141,14 +138,8 @@ async function ensureSchema() {
         id bigserial primary key, user_email text not null references mm_users(email) on delete cascade,
         category text, amount numeric(12,2) not null check (amount > 0))`);
       await c.query(`create unique index if not exists mm_budgets_cat on mm_budgets (user_email, (lower(coalesce(category, ''))))`);
-      // Daily reminders: time is HH:MM in IST; push subscriptions are per device.
-      await c.query(`alter table mm_users add column if not exists reminder_on boolean not null default false`);
+      // Daily reminder time (HH:MM, IST) used for the calendar reminder.
       await c.query(`alter table mm_users add column if not exists reminder_time text not null default '21:00'`);
-      await c.query(`alter table mm_users add column if not exists last_reminded date`);
-      await c.query(`create table if not exists mm_push (
-        endpoint text primary key, user_email text not null references mm_users(email) on delete cascade,
-        p256dh text, auth text, created_at timestamptz not null default now())`);
-      await c.query(`create index if not exists mm_push_user on mm_push (user_email)`);
       // One-time upgrade: earlier versions stored salary per month; turn each into an Income entry.
       await c.query(`create table if not exists mm_salaries (user_email text not null, month text not null,
         amount numeric(12,2) not null default 0, primary key (user_email, month))`);
@@ -518,82 +509,29 @@ async function saveBudget(sess, body) {
   }
 }
 
-// ---------- daily reminders (Web Push) ----------
-// Pushes carry no data: the service worker shows a fixed reminder, so no payload encryption is needed.
-// The VAPID key pair is created once and kept in mm_meta.
-let vapid = null;
-async function getVapid() {
-  if (vapid) return vapid;
-  let r = await q(`select value from mm_meta where key = 'vapid'`);
-  if (!r.rows.length) {
-    const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-    await q(`insert into mm_meta (key, value) values ('vapid', $1) on conflict (key) do nothing`, [JSON.stringify(privateKey.export({ format: "jwk" }))]);
-    r = await q(`select value from mm_meta where key = 'vapid'`);
-  }
-  const jwk = JSON.parse(r.rows[0].value);
-  vapid = {
-    key: crypto.createPrivateKey({ key: jwk, format: "jwk" }),
-    pub: Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]).toString("base64url"),
-  };
-  return vapid;
-}
-// Only real browser push services, so the server can't be pointed at arbitrary URLs.
-function pushEndpointOk(endpoint) {
-  try {
-    const u = new URL(endpoint);
-    const h = u.hostname.toLowerCase();
-    return u.protocol === "https:" && endpoint.length <= 1000 && (h === "fcm.googleapis.com" || h === "android.googleapis.com"
-      || h === "updates.push.services.mozilla.com" || h === "web.push.apple.com" || h.endsWith(".push.apple.com") || h.endsWith(".notify.windows.com"));
-  } catch { return false; }
-}
-async function sendPush(endpoint, subject) {
-  const v = await getVapid();
-  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  const unsigned = b64({ typ: "JWT", alg: "ES256" }) + "." + b64({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: subject });
-  const sig = crypto.sign("sha256", Buffer.from(unsigned), { key: v.key, dsaEncoding: "ieee-p1363" }).toString("base64url");
-  const r = await fetch(endpoint, {
-    method: "POST", signal: AbortSignal.timeout(8000),
-    headers: { TTL: "43200", Urgency: "high", Topic: "daily-reminder", Authorization: `vapid t=${unsigned}.${sig}, k=${v.pub}` },
-  });
-  if (r.status === 404 || r.status === 410) await q(`delete from mm_push where endpoint = $1`, [endpoint]);   // device unsubscribed
-  return r.ok;
-}
-async function sendToUser(email, subject) {
-  const subs = await q(`select endpoint from mm_push where user_email = $1`, [email]);
-  let sent = 0;
-  for (const s of subs.rows) {
-    try { if (await sendPush(s.endpoint, subject)) sent++; } catch (e) { console.error("push failed", e && e.message ? e.message : e); }
-  }
-  return sent;
-}
-async function savePush(sess, body) {
-  const sub = body.subscription || {};
-  const endpoint = String(sub.endpoint || "");
-  if (!pushEndpointOk(endpoint)) throw bad("This browser's notification service isn't supported");
-  const keys = sub.keys || {};
-  await q(`insert into mm_push (endpoint, user_email, p256dh, auth) values ($1, $2, $3, $4)
-    on conflict (endpoint) do update set user_email = excluded.user_email, p256dh = excluded.p256dh, auth = excluded.auth`,
-    [endpoint, sess.email, text(keys.p256dh, 200), text(keys.auth, 100)]);
-}
-// Called by an outside scheduler every ~15 minutes. Each user gets one reminder a day, at or up to
-// 3 hours after their chosen time (never early, and never in the middle of the night if the scheduler was down).
-async function runCron(req, res, url) {
-  if (!CRON_SECRET) return send(res, 503, { error: "Reminders are off: set CRON_SECRET in Vercel." });
-  const given = url.searchParams.get("key") || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  if (!safeEqual(given, CRON_SECRET)) return send(res, 401, { error: "Unauthorized" });
-  const now = istNow();
-  const users = await q(`select u.email, u.reminder_time from mm_users u where u.reminder_on
-    and (u.last_reminded is null or u.last_reminded < $1::date) and exists (select 1 from mm_push p where p.user_email = u.email)`, [now.date]);
-  let sent = 0;
-  for (const u of users.rows) {
-    if (!TIME_RE.test(u.reminder_time)) continue;
-    const at = Number(u.reminder_time.slice(0, 2)) * 60 + Number(u.reminder_time.slice(3, 5));
-    if (now.mins < at || now.mins > at + 180) continue;
-    const claim = await q(`update mm_users set last_reminded = $2::date where email = $1
-      and (last_reminded is null or last_reminded < $2::date) returning email`, [u.email, now.date]);
-    if (claim.rows.length) sent += await sendToUser(u.email, appOrigin(req));
-  }
-  return send(res, 200, { ok: true, users: users.rows.length, sent });
+// ---------- daily reminder (calendar event) ----------
+// No server scheduler: the reminder is a daily repeating calendar event with an alert, so the phone's
+// calendar app does the notifying. This builds the .ics file for Apple Calendar, Outlook and others.
+function reminderIcs(req, res, url) {
+  const time = url.searchParams.get("t") || "21:00";
+  if (!TIME_RE.test(time)) return send(res, 400, { error: "Invalid time" });
+  const day = istNow().date.replace(/-/g, ""), hm = time.replace(":", "");
+  const app = appOrigin(req) + "/";
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const ics = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Money Manager//Daily reminder//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VTIMEZONE", "TZID:Asia/Kolkata", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0530", "TZOFFSETTO:+0530", "TZNAME:IST", "END:STANDARD", "END:VTIMEZONE",
+    "BEGIN:VEVENT", `UID:daily-reminder-${hm}@money-manager`, `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=Asia/Kolkata:${day}T${hm}00`, "DURATION:PT5M", "RRULE:FREQ=DAILY",
+    "SUMMARY:Add today's spending in Money Manager", `DESCRIPTION:Open Money Manager: ${app}`, `URL:${app}`, "TRANSP:TRANSPARENT",
+    "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Add today's spending in Money Manager", "TRIGGER:PT0M", "END:VALARM",
+    "END:VEVENT", "END:VCALENDAR", "",
+  ].join("\r\n");
+  res.statusCode = 200;
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="money-manager-reminder.ics"');
+  res.end(ics);
 }
 
 // ---------- Google sign-in (OAuth 2.0 authorization code flow with PKCE) ----------
@@ -690,11 +628,11 @@ module.exports = async function handler(req, res) {
 
     if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, google: googleOn() });
     if (op === "google" && req.method === "GET") return googleStart(req, res, url);
+    if (op === "ics" && req.method === "GET") return reminderIcs(req, res, url);
     if (!DB_URL) return send(res, 503, { error: "Database not connected. Add Neon Postgres to the Vercel project and redeploy." });
     await ensureSchema();
     housekeeping();
     if (op === "google_cb" && req.method === "GET") return await googleCallback(req, res, url);
-    if (op === "cron" && req.method === "GET") return await runCron(req, res, url);
 
 
     const sess = await getSession(req);
@@ -713,13 +651,12 @@ module.exports = async function handler(req, res) {
         q(`select ${TXN_COLS} from mm_expenses where user_email = $1 order by created_at, id`, [sess.email]),
         q(`select ${REC_COLS} from mm_recurring where user_email = $1 order by day, id`, [sess.email]),
         q(`select ${BUD_COLS} from mm_budgets where user_email = $1 order by category nulls first, id`, [sess.email]),
-        q(`select reminder_on, reminder_time from mm_users where email = $1`, [sess.email]),
+        q(`select reminder_time from mm_users where email = $1`, [sess.email]),
       ]);
       const u = usr.rows[0] || {};
       return send(res, 200, { accounts: acc.rows, transactions: txs.rows, recurring: rec.rows, budgets: bud.rows,
-        reminder: { on: !!u.reminder_on, time: u.reminder_time || "21:00", scheduler: !!CRON_SECRET }, today: istNow().date });
+        reminder: { time: u.reminder_time || "21:00" }, today: istNow().date });
     }
-    if (req.method === "GET" && op === "pushKey") return send(res, 200, { key: (await getVapid()).pub });
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
 
     switch (op) {
@@ -750,17 +687,8 @@ module.exports = async function handler(req, res) {
       case "saveReminder": {
         const time = String(body.time || "");
         if (!TIME_RE.test(time)) throw bad("Choose a time");
-        await q(`update mm_users set reminder_on = $2, reminder_time = $3 where email = $1`, [sess.email, body.on === true, time]);
+        await q(`update mm_users set reminder_time = $2 where email = $1`, [sess.email, time]);
         return send(res, 200, { ok: true });
-      }
-      case "savePush": await savePush(sess, body); return send(res, 200, { ok: true });
-      case "deletePush":
-        await q(`delete from mm_push where endpoint = $1 and user_email = $2`, [String(body.endpoint || "").slice(0, 1000), sess.email]);
-        return send(res, 200, { ok: true });
-      case "testPush": {
-        const sent = await sendToUser(sess.email, appOrigin(req));
-        if (!sent) throw bad("Couldn't send a notification to this device. Turn reminders off and on again.");
-        return send(res, 200, { sent });
       }
       default: throw bad("Unknown operation");
     }

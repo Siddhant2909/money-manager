@@ -4,7 +4,7 @@
   const KIND_LABEL = { bank: "Bank", card: "Card", cash: "Cash" };
   const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const state = { email: null, name: null, onboarding: false, accounts: [], txns: [], recurring: [], budgets: [],
-    reminder: { on: false, time: "21:00", scheduler: false }, today: todayISO(), month: thisMonth(),
+    reminder: { time: "21:00" }, today: todayISO(), month: thisMonth(),
     mode: "entry", editing: null, editingRow: null, editingRec: null, kind: "expense", filKind: "", tab: "monthly", charts: {} };
 
   // ---------- theme ----------
@@ -671,67 +671,28 @@
     $("budDlg").close(); renderCurrent(); toast("Budget removed");
   }
 
-  // ---------- daily reminder (Web Push) ----------
-  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  const IOS_MSG = "On iPhone, first add Money Manager to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.";
+  // ---------- daily reminder (a repeating calendar event; no server scheduler needed) ----------
   function renderReminder() {
-    const r = state.reminder;
-    $("remOn").checked = r.on; $("remTime").value = r.time;
-    $("remSub").textContent = r.on ? `Every day at ${fmtTime(r.time)}` : "Off";
-    $("remTimeRow").classList.toggle("hidden", !r.on);
-    $("remTestRow").classList.toggle("hidden", !r.on);
-    $("remNote").textContent = !r.scheduler ? "Reminders also need a one-time scheduler setup by whoever runs this app (see the README). Until then nothing is sent."
-      : isIOS && !standalone() ? IOS_MSG
-      : "You'll get the reminder on each phone or computer where you turn this on.";
-  }
-  const b64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
-  async function enablePush() {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-      throw new Error(isIOS && !standalone() ? IOS_MSG : "This browser can't show notifications. Try Chrome or Edge.");
-    }
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") throw new Error("Notifications are blocked for this site. Allow them in your browser or phone settings, then try again.");
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      const { key } = await api("pushKey");
-      try { sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(key) }); }
-      catch { throw new Error("This device couldn't sign up for notifications. Check you're online, then try again."); }
-    }
-    await api("savePush", { subscription: sub.toJSON() });
-  }
-  async function disablePush() {
-    try {
-      const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
-      const sub = reg ? await reg.pushManager.getSubscription() : null;
-      if (sub) { await api("deletePush", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
-    } catch { /* turning it off on the server is what matters */ }
-  }
-  async function toggleReminder() {
-    const on = $("remOn").checked;
-    $("remErr").textContent = ""; $("remOn").disabled = true;
-    try {
-      if (on) await enablePush(); else await disablePush();
-      await api("saveReminder", { on, time: state.reminder.time });
-      state.reminder.on = on;
-      toast(on ? `Reminder set for ${fmtTime(state.reminder.time)} every day` : "Reminder turned off");
-    } catch (e) { $("remErr").textContent = e.message; }
-    finally { $("remOn").disabled = false; renderReminder(); }
+    const t = state.reminder.time;
+    $("remTime").value = t;
+    // A 5-minute event from the chosen time today (IST wall-clock time; Google applies ctz).
+    const [y, mo, d] = state.today.split("-").map(Number), [h, mi] = t.split(":").map(Number);
+    const stamp = (dt) => dt.toISOString().slice(0, 19).replace(/[-:]/g, "");
+    const start = stamp(new Date(Date.UTC(y, mo - 1, d, h, mi))), end = stamp(new Date(Date.UTC(y, mo - 1, d, h, mi + 5)));
+    const app = location.origin + "/";
+    $("remGoogle").href = "https://calendar.google.com/calendar/render?" + new URLSearchParams({
+      action: "TEMPLATE", text: "Add today's spending in Money Manager", details: `Open Money Manager: ${app}`,
+      dates: `${start}/${end}`, ctz: "Asia/Kolkata", recur: "RRULE:FREQ=DAILY",
+    }).toString();
+    $("remIcs").href = "/api/data?op=ics&t=" + encodeURIComponent(t);
   }
   async function changeReminderTime() {
     const time = $("remTime").value;
     if (!/^\d{2}:\d{2}$/.test(time)) return;
     $("remErr").textContent = "";
-    try { await api("saveReminder", { on: state.reminder.on, time }); state.reminder.time = time; renderReminder(); toast(`Reminder moved to ${fmtTime(time)}`); }
+    state.reminder.time = time; renderReminder();
+    try { await api("saveReminder", { time }); toast(`Reminder time set to ${fmtTime(time)}. Add it to your calendar below.`); }
     catch (e) { $("remErr").textContent = e.message; }
-  }
-  async function testReminder() {
-    $("remErr").textContent = ""; $("remTest").disabled = true;
-    try { await api("testPush", {}); toast("Test sent. It should arrive in a few seconds."); }
-    catch (e) { $("remErr").textContent = e.message; }
-    finally { $("remTest").disabled = false; }
   }
 
   // ---------- investment ----------
@@ -1012,9 +973,7 @@
     for (const b of ["budClose", "budCancel"]) $(b).addEventListener("click", () => $("budDlg").close());
     $("budDlg").addEventListener("click", (e) => { if (e.target === $("budDlg")) $("budDlg").close(); });
     // reminder
-    $("remOn").addEventListener("change", toggleReminder);
     $("remTime").addEventListener("change", changeReminderTime);
-    $("remTest").addEventListener("click", testReminder);
     $("fAmt").addEventListener("input", sizeAmount);
     $("fFrom").addEventListener("change", refreshFormFields);
     $("entryForm").addEventListener("submit", saveEntry);

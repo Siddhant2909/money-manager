@@ -16,7 +16,6 @@ The design is dark. It runs on Vercel, with a Neon Postgres database.
 ```
 money-manager/
 ├── index.html            sign-in page and the app
-├── sw.js                 service worker that shows the daily reminder
 ├── manifest.webmanifest  lets phones install the app on the home screen
 ├── styles.css            design (dark)
 ├── favicon.svg           logo / browser icon
@@ -30,7 +29,7 @@ money-manager/
 │   └── chart.umd.min.js  Chart.js 4.5.1 (hosted locally, MIT licence)
 └── api/
     └── data.js           server API: Google sign-in, sessions, accounts, entries, budgets,
-                          recurring payments and reminders
+                          recurring payments and the reminder calendar file
 ```
 
 ## Setup
@@ -59,16 +58,12 @@ Optional settings:
 
 If your Google OAuth consent screen is still in **Testing**, Google only lets the test users you listed sign in. To let anyone sign in, open **Google Auth Platform → Audience** and click **Publish app**. For basic sign-in (name and email), Google doesn't require a review.
 
-### Daily reminders (optional)
-Each person can turn on a daily reminder in **Settings → Daily reminder** and pick a time (IST). It arrives as a phone or computer notification. Something has to check every few minutes whose reminder is due. Vercel's free plan only allows a scheduled job once a day, so a free outside scheduler does it:
+### Daily reminder
+In **Settings → Daily reminder**, pick a time (IST) and add the reminder to your calendar:
+- **Google Calendar** opens a daily repeating event, ready to save. The alert uses your calendar's default notification.
+- **Apple / Outlook / other** downloads a calendar file (`.ics`) with a daily event and an alert at that exact time. On iPhone, tap **Add All**.
 
-1. Make up a long random password, e.g. 32 letters and numbers. In Vercel, go to **Settings → Environment Variables**, add `CRON_SECRET` with that value, then **Redeploy**.
-2. Create a free account at [cron-job.org](https://cron-job.org) and add a cron job:
-   - URL: `https://<your-app>.vercel.app/api/data?op=cron&key=<your CRON_SECRET>`
-   - Schedule: every 15 minutes.
-3. To check it works, open that URL in your browser. You should see `{"ok":true,...}`.
-
-Each person gets at most one reminder a day, at their chosen time or up to 15 minutes after (or up to 3 hours after if the scheduler was down; never in the middle of the night). On iPhone, the app must first be added to the Home Screen (Share → **Add to Home Screen**) and opened from there; this needs iOS 16.4 or later. Android and desktop Chrome, Edge and Firefox work straight from the browser.
+Your phone's calendar app sends the notification, even when Money Manager is closed. Nothing else needs setting up: there's no scheduler, push service or cost. To change the time, delete the old event from your calendar and add it again.
 
 ## Budgets and recurring payments
 - **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.
@@ -97,7 +92,6 @@ Entries from very old versions (before accounts existed) are marked **Not linked
 | Area | What's implemented |
 |---|---|
 | Sign-in | Google only, so there are no passwords to guess, reuse or leak. The server runs the OAuth 2.0 authorization code flow with PKCE and a one-time `state` value kept in a short-lived HttpOnly cookie. No Google scripts are loaded, so the strict CSP is unchanged. The ID token is fetched directly from Google over TLS, and its issuer, audience, expiry and `email_verified` are checked. Sign-in attempts are limited per IP (`AUTH_RATE_LIMIT`). |
-| Reminders | Push notifications carry no data. The service worker shows a fixed message, so nothing about your money leaves the server. The server signs each push with its own VAPID key, which is created once and kept in the database. It only sends to the browser push services of Google, Mozilla, Apple and Microsoft. The scheduler URL needs `CRON_SECRET`, compared in constant time. |
 | Sessions | A random 256-bit token is kept in a `__Host-` cookie (HttpOnly, Secure, SameSite=Strict). Only its SHA-256 hash is stored. Sessions expire after 14 days, or after 7 days of inactivity. Each sign-in gets a new session, and signing out deletes the session on the server. |
 | CSRF | Every change needs a per-session token sent in a header. The API also checks the request's origin and accepts JSON bodies only. |
 | Injection | Every database query is parameterised. All input is checked against strict allow-lists (amount format, dates, entry types, IDs, text length) and control characters are removed. |
