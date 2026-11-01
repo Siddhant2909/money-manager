@@ -29,29 +29,19 @@
   <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/></symbol>
   <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
   <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
 </svg>
 <main>
 
   <!-- Sign in -->
   <section id="loginView" class="center hidden">
-    <div class="authcard">
-      <img class="logo lg" src="/favicon.svg" alt="" width="44" height="44">
-      <h1>Welcome back</h1>
-      <p class="muted">Sign in to Money Manager</p>
-      <div id="googleWrap" class="hidden">
-        <a class="btn google block" href="/auth/google"><svg class="g" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg><span>Continue with Google</span></a>
-        <div class="or"><span>or use your email</span></div>
-      </div>
-      <form id="loginForm" class="stack" novalidate>
-        <div><label for="email">Email</label><input id="email" type="email" autocomplete="username" maxlength="254" required></div>
-        <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" maxlength="128" required></div>
-        <div class="err" id="authErr" role="alert"></div>
-        <button class="btn primary block" id="signIn" type="submit">Sign in</button>
-        <p class="auth-foot">New here? <a href="/register">Create an account</a></p>
-      </form>
+    <div class="authcard signin">
+      <img class="logo lg" src="/favicon.svg" alt="" width="52" height="52">
+      <h1>Money Manager</h1>
+      <p class="muted">Track every rupee in one calm place.</p>
+      <a class="btn google block" id="googleBtn" href="/auth/google"><svg class="g" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg><span>Continue with Google</span></a>
+      <div class="err" id="authErr" role="alert"></div>
+      <p class="faint signin-foot">New here? Continuing with Google creates your account.</p>
     </div>
   </section>
 
@@ -70,18 +60,6 @@
     </header>
     <div class="err" id="appErr" role="alert"></div>
     <div id="loader" class="loader hidden"><div class="spin"></div></div>
-
-    <!-- First-time account setup -->
-    <div id="setupView" class="hidden">
-      <div class="onboard">
-        <div class="ob-step">Almost there</div>
-        <h2 class="title" id="setupTitle">Set up your accounts</h2>
-        <p class="muted">Add where your money lives, so balances update as you add entries. You can change these any time in Settings.</p>
-        <div id="setupForm" class="stack"></div>
-        <div class="err" id="setupErr" role="alert"></div>
-        <button class="btn primary block" id="setupSave" type="button">Continue</button>
-      </div>
-    </div>
 
     <!-- Monthly -->
     <div id="tab-monthly" class="hidden">
@@ -162,6 +140,12 @@
         <div class="pagehead"><div><h2 class="title">Settings</h2></div>
           <button class="btn ghost sm" id="settingsBack" type="button"><svg class="i"><use href="#i-back"/></svg>Back</button></div>
 
+        <section class="panel welcome hidden" id="welcome">
+          <h3 id="welcomeTitle">Welcome</h3>
+          <p class="muted">Start by adding the bank account you use most. Its current balance is enough: balances update as you add entries. You can add cards and another bank account any time.</p>
+          <button class="btn primary" id="welcomeAdd" type="button"><svg class="i"><use href="#i-plus"/></svg>Add bank account</button>
+        </section>
+
         <section class="panel profile">
           <div class="pf-row">
             <span class="avatar xl" id="pfAvatar" aria-hidden="true"></span>
@@ -175,16 +159,15 @@
           </form>
         </section>
 
-        <div class="sec-head"><h3>Accounts</h3><button class="btn ghost sm" id="accAdd" type="button"><svg class="i"><use href="#i-plus"/></svg>Add account</button></div>
+        <div class="sec-head" id="accSec"><h3>Accounts</h3><button class="btn ghost sm" id="accAdd" type="button"><svg class="i"><use href="#i-plus"/></svg>Add account</button></div>
         <section class="panel rows" id="accRows"></section>
-        <p class="sec-note">Balances are worked out from each account's opening amount plus your entries. An account that has entries can't be removed.</p>
+        <p class="sec-note" id="accNote">Balances are worked out from each account's opening amount plus your entries. An account that has entries can't be removed.</p>
 
-        <div class="sec-head"><h3>Security</h3></div>
+        <div class="sec-head"><h3>Sign-in</h3></div>
         <section class="panel rows">
           <div class="row">
-            <span class="r-ic"><svg class="i"><use href="#i-lock"/></svg></span>
-            <span class="r-main"><span class="r-title">Password</span><span class="r-sub" id="pwSub"></span></span>
-            <button class="btn ghost sm" id="pwOpen" type="button">Change</button>
+            <span class="r-ic"><svg class="g sm" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg></span>
+            <span class="r-main"><span class="r-title">Google account</span><span class="r-sub" id="gEmail"></span></span>
           </div>
           <div class="row">
             <span class="r-ic"><svg class="i"><use href="#i-out"/></svg></span>
@@ -254,29 +237,6 @@
       <span class="grow"></span>
       <button class="btn ghost" id="accCancel" type="button">Cancel</button>
       <button class="btn primary" id="accSave" type="submit">Save</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- Change password -->
-<dialog id="pwDlg" aria-labelledby="pwTitle">
-  <form method="dialog" id="pwForm" class="dlg-form" novalidate>
-    <div class="dlg-head">
-      <h2 id="pwTitle">Change password</h2>
-      <button class="iconbtn plain" id="pwClose" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
-    </div>
-    <input type="email" autocomplete="username" class="hidden" id="pwUser" tabindex="-1" aria-hidden="true">
-    <div class="stack">
-      <div id="pwCurWrap"><label for="pwCur">Current password</label><input id="pwCur" type="password" autocomplete="current-password" maxlength="128"></div>
-      <div><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" maxlength="128"></div>
-      <div><label for="pwNew2">Confirm new password</label><input id="pwNew2" type="password" autocomplete="new-password" maxlength="128"></div>
-    </div>
-    <p class="hint">At least 10 characters. Changing it signs you out on your other devices.</p>
-    <div class="err" id="pwErr" role="alert"></div>
-    <div class="dlg-foot">
-      <span class="grow"></span>
-      <button class="btn ghost" id="pwCancel" type="button">Cancel</button>
-      <button class="btn primary" id="pwSave" type="submit">Save password</button>
     </div>
   </form>
 </dialog>
