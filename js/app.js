@@ -1,9 +1,9 @@
 "use strict";
 (() => {
-  const { $, esc, fmt, fmt0, num0, num2, round2, pad, monthLabel, monthLong, thisMonth, todayISO, shiftMonth, lastDay, fmtDate, MON, MONEY_RE, icon, api, toast } = MM;
+  const { $, esc, fmt, fmt0, num0, num2, round2, pad, monthLabel, monthLong, thisMonth, todayISO, shiftMonth, lastDay, fmtDate, MON, MONEY_RE, icon, api, toast, KIND_ICON } = MM;
   const KIND_LABEL = { bank: "Bank", card: "Card", cash: "Cash" };
   const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const state = { email: null, name: null, accounts: [], txns: [], month: thisMonth(), editing: null, editingRow: null, kind: "expense",
+  const state = { email: null, name: null, hasPassword: true, accounts: [], txns: [], month: thisMonth(), editing: null, editingRow: null, kind: "expense",
     filKind: "", tab: "monthly", charts: {} };
 
   // ---------- theme ----------
@@ -18,11 +18,19 @@
   // ---------- user ----------
   const displayName = () => state.name || (state.email ? state.email.split("@")[0] : "");
   const firstName = () => displayName().split(" ")[0];
+  const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   function renderUser() {
     const n = displayName();
     $("who").textContent = n;
-    $("avatar").textContent = n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    $("avatar").textContent = initials(n);
   }
+  // Amount with the paise shown faintly: ₹22,000.00 → ₹22,000<span>.00</span>
+  function money(n) {
+    const s = num2(n), i = s.lastIndexOf(".");
+    return `₹${esc(s.slice(0, i))}<span class="dec">${esc(s.slice(i))}</span>`;
+  }
+  // Stable colour per category, so the same category always gets the same tint.
+  function hue(c) { let h = 0; for (const ch of catKey(c)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return 1 + (h % 7); }
 
   // ---------- accounts & balances ----------
   const accById = (id) => state.accounts.find((a) => a.id === id);
@@ -197,6 +205,12 @@
       + stat("Spent", fmt0(t.exp), "")
       + stat("Saved", fmt0(t.sav), "", t.sav < 0 ? "neg" : t.sav > 0 ? "pos" : "")
       + stat("Invested", fmt0(t.inv), "");
+    if (t.income > 0) {
+      const pct = Math.round((t.exp / t.income) * 100);
+      $("monthKpis").insertAdjacentHTML("beforeend", `<div class="s-bar"><div class="bar"><span data-w="${Math.min(100, pct)}"${pct > 100 ? ' class="over"' : ""}></span></div>
+        <span>${pct > 100 ? `Spent ${pct}% of income` : `Spent ${pct}% of income · ${esc(fmt0(t.sav))} left`}</span></div>`);
+      applyBars($("monthKpis"));
+    }
 
     // accounts this month (opening = previous month's closing)
     let at = `<thead><tr><th>Account</th><th class="num">Opening</th><th class="num">In</th><th class="num">Out</th><th class="num">Closing</th></tr></thead><tbody>`;
@@ -249,17 +263,19 @@
         const tags = (r.type ? `<span class="tag ${esc(r.type)}">${esc(r.type)}</span>` : "") + (!r.account_id && r.kind !== "transfer" ? '<span class="tag unlinked">Not linked</span>' : "");
         const sign = r.kind === "income" ? "+" : r.kind === "expense" ? "−" : "";
         const cls = r.kind === "income" ? "pos" : r.kind === "transfer" ? "muted-amt" : isInv(r) ? "inv" : "";
-        const ic = r.kind === "income" ? "i-in" : r.kind === "transfer" ? "i-swap" : "i-outa";
+        const letter = (r.category || r.name || "?").trim().charAt(0).toUpperCase();
+        const ic = r.kind === "income" ? `<span class="e-ic income">${icon("i-in")}</span>` : r.kind === "transfer" ? `<span class="e-ic transfer">${icon("i-swap")}</span>`
+          : `<span class="e-ic h${hue(r.category || r.name)}">${esc(letter)}</span>`;
         html += `<button type="button" class="entry" data-edit="${esc(r.id)}">
-          <span class="e-ic ${r.kind}">${icon(ic)}</span>
+          ${ic}
           <span class="e-main"><span class="e-name">${esc(name)}</span><span class="e-meta">${meta}${tags}</span></span>
-          <span class="e-amt ${cls}">${sign}₹${num2(r.amount)}</span>
+          <span class="e-amt ${cls}">${sign}${money(r.amount)}</span>
         </button>`;
       }
     }
     if (fk || q) {
       const sum = shown.reduce((s, r) => s + (r.kind === "income" ? r.amount : r.kind === "expense" ? -r.amount : 0), 0);
-      html += `<div class="list-foot"><span>${shown.length} of ${rows.length} entries</span>${fk === "transfer" ? "" : `<span class="${sum < 0 ? "" : "pos"}" id="filteredTotal">Net ${sum < 0 ? "−" : "+"}₹${num2(Math.abs(sum))}</span>`}</div>`;
+      html += `<div class="list-foot"><span>${shown.length} of ${rows.length} entries</span>${fk === "transfer" ? "" : `<span class="${sum < 0 ? "" : "pos"}" id="filteredTotal">Net ${sum < 0 ? "−" : "+"}${money(Math.abs(sum))}</span>`}</div>`;
     } else {
       html += `<div class="list-foot"><span>${rows.length} entr${rows.length === 1 ? "y" : "ies"}</span></div>`;
     }
@@ -428,25 +444,32 @@
   }
 
   // ---------- settings ----------
-  let settingsForm = null, setupForm = null;
+  let setupForm = null;
+  const KIND_NAME = { bank: "Bank account", card: "Credit card", cash: "Cash" };
   function openSettings() {
-    settingsForm = MM.accountsForm($("settingsForm"), state.accounts, "edit");
-    $("settingsErr").textContent = ""; $("pwErr").textContent = ""; $("pfErr").textContent = ""; $("pwUser").value = state.email || "";
-    $("pfName").value = state.name || ""; $("pfEmail").textContent = "Signed in as " + (state.email || "");
+    renderSettings();
+    $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); $("pfErr").textContent = "";
     for (const b of document.querySelectorAll(".tabs button")) b.classList.remove("active");
     showView("settingsView"); window.scrollTo({ top: 0 });
   }
-  async function saveSettings() {
-    const { accounts, error } = settingsForm.read();
-    if (error) { $("settingsErr").textContent = error; return; }
-    $("settingsSave").disabled = true; $("settingsErr").textContent = "";
-    try {
-      const r = await api("saveAccounts", { accounts });
-      state.accounts = r.accounts;
-      settingsForm = MM.accountsForm($("settingsForm"), state.accounts, "edit");
-      toast("Accounts saved");
-    } catch (e) { $("settingsErr").textContent = e.message; }
-    finally { $("settingsSave").disabled = false; }
+  function renderSettings() {
+    const n = displayName();
+    $("pfAvatar").textContent = initials(n); $("pfNameTxt").textContent = n; $("pfEmail").textContent = state.email || "";
+    let html = "";
+    for (const a of sortedAccounts()) {
+      const st = accountStats(a, null);
+      const sub = a.kind === "card" ? `Limit ${fmt0(a.credit_limit)} · ${fmt0(round2(a.credit_limit - st.closing))} available` : KIND_NAME[a.kind];
+      html += `<button type="button" class="row" data-acc="${esc(a.id)}">
+        <span class="r-ic">${icon(KIND_ICON[a.kind])}</span>
+        <span class="r-main"><span class="r-title">${esc(a.name)}</span><span class="r-sub">${esc(sub)}</span></span>
+        <span class="r-val"><span class="r-amt${a.kind !== "card" && st.closing < 0 ? " neg" : ""}">${esc(fmt(st.closing))}</span><span class="r-sub">${a.kind === "card" ? "due" : "balance"}</span></span>
+        <svg class="i chev" aria-hidden="true"><use href="#i-right"/></svg>
+      </button>`;
+    }
+    $("accRows").innerHTML = html;
+    $("accAdd").classList.toggle("hidden", !freeSlot("bank") && !freeSlot("card"));
+    $("pwSub").textContent = state.hasPassword ? "Sign in with your email and password" : "No password yet. You sign in with Google.";
+    $("pwOpen").textContent = state.hasPassword ? "Change" : "Set password";
   }
   async function saveProfile(e) {
     e.preventDefault();
@@ -454,34 +477,107 @@
     $("pfErr").textContent = "";
     if (!name) { $("pfErr").textContent = "Enter your name."; return; }
     $("pfSave").disabled = true;
-    try { const r = await api("saveProfile", { name }); state.name = r.name; renderUser(); toast("Name saved"); }
-    catch (ex) { $("pfErr").textContent = ex.message; }
+    try {
+      const r = await api("saveProfile", { name }); state.name = r.name; renderUser(); renderSettings();
+      $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); toast("Name saved");
+    } catch (ex) { $("pfErr").textContent = ex.message; }
     finally { $("pfSave").disabled = false; }
+  }
+
+  // account dialog: edits one account, then saves the full list (the API takes all accounts at once)
+  const freeSlot = (kind) => [1, 2].find((n) => !state.accounts.some((a) => a.kind === kind && a.slot === n));
+  const acc = { id: null, kind: "bank" };
+  function setAccKind(k) {
+    acc.kind = k;
+    $("accKind").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
+    $("accNameWrap").classList.toggle("hidden", k === "cash");
+    $("accLimWrap").classList.toggle("hidden", k !== "card");
+    $("accBalLbl").textContent = k === "card" ? "Amount due when you started (₹)" : k === "cash" ? "Cash you started with (₹)" : "Balance when you started (₹)";
+    $("accName").placeholder = k === "card" ? "e.g. HDFC Millennia" : "e.g. SBI Salary";
+  }
+  function openAccount(id) {
+    const a = id ? accById(id) : null;
+    acc.id = a ? a.id : null;
+    $("accErr").textContent = "";
+    $("accTitle").textContent = a ? (a.kind === "cash" ? "Cash" : "Edit account") : "Add account";
+    $("accKind").classList.toggle("hidden", !!a);
+    if (!a) $("accKind").querySelectorAll("button").forEach((b) => { b.disabled = !freeSlot(b.dataset.k); });
+    setAccKind(a ? a.kind : freeSlot("bank") ? "bank" : "card");
+    $("accName").value = a ? a.name : "";
+    $("accBal").value = a ? String(a.opening_balance) : "";
+    $("accLim").value = a && a.credit_limit ? String(a.credit_limit) : "";
+    const removable = a && a.kind !== "cash" && !(a.kind === "bank" && a.slot === 1);
+    $("accRemove").classList.toggle("hidden", !removable);
+    $("accHint").textContent = a ? "Current balances are worked out from this starting amount plus your entries." : "";
+    $("accDlg").showModal();
+    if (!a) $("accName").focus();
+  }
+  const accPayload = (a) => ({ kind: a.kind, slot: a.slot, name: a.name, opening_balance: String(a.opening_balance), ...(a.kind === "card" ? { credit_limit: String(a.credit_limit) } : {}) });
+  async function sendAccounts(list, msg) {
+    $("accSave").disabled = $("accRemove").disabled = true;
+    try {
+      const r = await api("saveAccounts", { accounts: list });
+      state.accounts = r.accounts; $("accDlg").close(); renderSettings(); toast(msg);
+    } catch (e) { $("accErr").textContent = e.message; }
+    finally { $("accSave").disabled = $("accRemove").disabled = false; }
+  }
+  function saveAccount(e) {
+    e.preventDefault();
+    $("accErr").textContent = "";
+    const k = acc.kind, cur = acc.id ? accById(acc.id) : null;
+    const name = k === "cash" ? "Cash" : $("accName").value.trim();
+    const bal = ($("accBal").value.trim() || "0").replace(/,/g, "");
+    const lim = $("accLim").value.trim().replace(/,/g, "");
+    if (!name) { $("accErr").textContent = "Enter a name."; $("accName").focus(); return; }
+    if (!MONEY_RE.test(bal)) { $("accErr").textContent = "Enter a valid amount (no minus sign, up to 2 decimals)."; $("accBal").focus(); return; }
+    if (k === "card" && (!MONEY_RE.test(lim) || Number(lim) <= 0)) { $("accErr").textContent = "Enter the credit limit."; $("accLim").focus(); return; }
+    const updated = { kind: k, slot: cur ? cur.slot : freeSlot(k), name, opening_balance: bal, credit_limit: k === "card" ? lim : null };
+    if (!updated.slot) { $("accErr").textContent = "You already have two of these."; return; }
+    const list = state.accounts.filter((a) => !cur || a.id !== cur.id).map(accPayload).concat([accPayload(updated)]);
+    sendAccounts(list, cur ? "Account saved" : "Account added");
+  }
+  function removeAccount() {
+    const cur = accById(acc.id); if (!cur) return;
+    if (!confirm(`Remove "${cur.name}"?`)) return;
+    sendAccounts(state.accounts.filter((a) => a.id !== cur.id).map(accPayload), "Account removed");
+  }
+
+  function openPassword() {
+    $("pwErr").textContent = ""; $("pwCur").value = $("pwNew").value = $("pwNew2").value = ""; $("pwUser").value = state.email || "";
+    $("pwCurWrap").classList.toggle("hidden", !state.hasPassword);
+    $("pwTitle").textContent = state.hasPassword ? "Change password" : "Set a password";
+    $("pwDlg").showModal();
+    (state.hasPassword ? $("pwCur") : $("pwNew")).focus();
   }
   async function changePassword(e) {
     e.preventDefault();
     const cur = $("pwCur").value, n1 = $("pwNew").value, n2 = $("pwNew2").value;
     $("pwErr").textContent = "";
     const p = MM.passwordProblem(n1, state.email);
-    if (!cur) { $("pwErr").textContent = "Enter your current password."; return; }
+    if (state.hasPassword && !cur) { $("pwErr").textContent = "Enter your current password."; return; }
     if (p) { $("pwErr").textContent = p; return; }
     if (n1 !== n2) { $("pwErr").textContent = "The new passwords don't match."; return; }
     $("pwSave").disabled = true;
-    try { await api("changePassword", { current: cur, next: n1 }); $("pwCur").value = $("pwNew").value = $("pwNew2").value = ""; toast("Password changed"); }
-    catch (ex) { $("pwErr").textContent = ex.message; }
+    try {
+      await api("changePassword", { current: cur, next: n1 });
+      $("pwCur").value = $("pwNew").value = $("pwNew2").value = "";
+      const first = !state.hasPassword; state.hasPassword = true;
+      $("pwDlg").close(); renderSettings(); toast(first ? "Password set" : "Password changed");
+    } catch (ex) { $("pwErr").textContent = ex.message; }
     finally { $("pwSave").disabled = false; }
   }
 
   // ---------- navigation & auth ----------
   function setTab(tab) {
     state.tab = tab;
+    document.querySelector(".tabs").classList.remove("hidden"); $("settingsBtn").disabled = false;
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
     showView("tab-" + tab);
     window.scrollTo({ top: 0 });
     if (tab === "dashboard") renderDashboard(); else if (tab === "monthly") renderMonthly(); else renderInvestment();
   }
-  async function enterApp(email, name) {
-    state.email = email; state.name = name || null; renderUser();
+  async function enterApp(email, name, hasPassword) {
+    state.email = email; state.name = name || null; state.hasPassword = hasPassword !== false; renderUser();
     showPage("app"); $("appErr").textContent = "";
     for (const v of VIEWS) $(v).classList.add("hidden");
     $("loader").classList.remove("hidden");
@@ -490,7 +586,9 @@
       state.accounts = d.accounts; state.txns = d.transactions.map((t) => ({ ...t, amount: Number(t.amount) }));
     } catch (e) { $("loader").classList.add("hidden"); $("appErr").textContent = "Could not load data: " + e.message; return; }
     if (!state.accounts.length) {
-      setupForm = MM.accountsForm($("setupForm"), [], "register");
+      setupForm = MM.accountsForm($("setupForm"), []);
+      $("setupTitle").textContent = firstName() ? `Welcome, ${firstName()}` : "Set up your accounts";
+      document.querySelector(".tabs").classList.add("hidden"); $("settingsBtn").disabled = true;
       showView("setupView"); return;
     }
     setMonth(state.month);
@@ -506,7 +604,7 @@
   }
   function signedOut(msg) {
     MM.setCsrf(""); state.email = null; state.name = null; state.accounts = []; state.txns = [];
-    if ($("entryDlg").open) $("entryDlg").close();
+    for (const d of ["entryDlg", "accDlg", "pwDlg"]) if ($(d).open) $(d).close();
     for (const k of Object.keys(state.charts)) if (state.charts[k]) { state.charts[k].destroy(); state.charts[k] = null; }
     showPage("login"); $("authErr").textContent = msg || ""; $("password").value = "";
   }
@@ -519,7 +617,7 @@
     try {
       const r = await api("login", { email, password });
       MM.setCsrf(r.csrf); $("password").value = "";
-      enterApp(r.email, r.name);
+      enterApp(r.email, r.name, r.hasPassword);
     } catch (ex) { $("authErr").textContent = ex.message; }
     finally { $("signIn").disabled = false; }
   }
@@ -527,12 +625,23 @@
   function wire() {
     MM.setUnauthorizedHandler(() => signedOut("Your session ended. Please sign in again."));
     $("loginForm").addEventListener("submit", login);
-    $("signOut").addEventListener("click", async () => { try { await api("logout", {}); } catch { /* ignore */ } signedOut(); });
+    $("signOut2").addEventListener("click", async () => { try { await api("logout", {}); } catch { /* ignore */ } signedOut(); });
     $("settingsBtn").addEventListener("click", openSettings);
     $("settingsBack").addEventListener("click", () => setTab(state.tab));
-    $("settingsSave").addEventListener("click", saveSettings);
+    $("pfEdit").addEventListener("click", () => { $("pfName").value = state.name || ""; $("profileForm").classList.remove("hidden"); $("pfEdit").classList.add("hidden"); $("pfName").focus(); });
+    $("pfCancel").addEventListener("click", () => { $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); $("pfErr").textContent = ""; });
     $("profileForm").addEventListener("submit", saveProfile);
+    $("accRows").addEventListener("click", (e) => { const b = e.target.closest("button[data-acc]"); if (b) openAccount(b.dataset.acc); });
+    $("accAdd").addEventListener("click", () => openAccount(null));
+    $("accKind").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && !b.disabled) setAccKind(b.dataset.k); });
+    $("accForm").addEventListener("submit", saveAccount);
+    $("accRemove").addEventListener("click", removeAccount);
+    $("pwOpen").addEventListener("click", openPassword);
     $("pwForm").addEventListener("submit", changePassword);
+    for (const [dlg, ...btns] of [["accDlg", "accClose", "accCancel"], ["pwDlg", "pwClose", "pwCancel"]]) {
+      for (const b of btns) $(b).addEventListener("click", () => $(dlg).close());
+      $(dlg).addEventListener("click", (e) => { if (e.target === $(dlg)) $(dlg).close(); });
+    }
     $("setupSave").addEventListener("click", saveSetup);
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
     $("monthBtn").addEventListener("click", () => { const i = $("month"); try { i.showPicker(); } catch { i.focus(); } });
@@ -577,11 +686,13 @@
   async function start() {
     if (typeof Chart !== "undefined") { Chart.defaults.color = css("--muted"); Chart.defaults.font.family = css("--font"); }
     wire();
+    const authError = MM.takeAuthError();
     try {
       const cfg = await api("config");
       if (!cfg.db) { showPage("login"); $("authErr").textContent = "Setup is not finished: connect Neon Postgres to the Vercel project, then redeploy."; return; }
       const s = await api("session");
-      if (s.authenticated) { MM.setCsrf(s.csrf); enterApp(s.email, s.name); } else signedOut();
+      $("googleWrap").classList.toggle("hidden", !cfg.google);
+      if (s.authenticated) { MM.setCsrf(s.csrf); enterApp(s.email, s.name, s.hasPassword); } else signedOut(authError);
     } catch (e) { showPage("login"); $("authErr").textContent = "Could not reach the server: " + e.message; }
   }
   start();
