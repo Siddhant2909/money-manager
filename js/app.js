@@ -36,6 +36,7 @@
   function entryIcon(kind, label) {
     if (kind === "income") return `<span class="e-ic income">${icon("i-in")}</span>`;
     if (kind === "transfer") return `<span class="e-ic transfer">${icon("i-swap")}</span>`;
+    if (kind === "invest") return `<span class="e-ic invest">${icon("i-trend")}</span>`;
     return `<span class="e-ic h${hue(label)}">${esc((label || "?").trim().charAt(0).toUpperCase())}</span>`;
   }
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
@@ -71,7 +72,7 @@
       return null;
     }
     if (t.account_id !== acc.id) return null;
-    if (acc.kind === "card") return t.kind === "expense" ? { in: a } : { out: a };
+    if (acc.kind === "card") return t.kind === "expense" || t.kind === "invest" ? { in: a } : { out: a };
     return t.kind === "income" ? { in: a } : { out: a };
   }
   function accountStats(acc, month) {
@@ -87,13 +88,25 @@
   }
 
   // ---------- totals ----------
-  const isInv = (t) => t.kind === "expense" && t.type === "Investment";
+  // Investments: the "invest" entry type, plus older expenses that were marked Investment.
+  const isInv = (t) => t.kind === "invest" || (t.kind === "expense" && t.type === "Investment");
+  const isSpend = (t) => t.kind === "expense" && t.type !== "Investment";
+  const INVEST_TYPES = ["Mutual fund", "Stocks", "Gold", "FD", "RD", "PPF", "NPS", "Other"];
+  // Type of an investment; older entries are matched from what was typed as "Invested in".
+  function investType(t) {
+    if (t.kind === "invest") return INVEST_TYPES.includes(t.category) ? t.category : "Other";
+    const c = (t.category || "").toLowerCase();
+    return /mutual|\bmf\b|sip|index fund/.test(c) ? "Mutual fund" : /stock|share|equity/.test(c) ? "Stocks" : /gold|sgb/.test(c) ? "Gold"
+      : /\bfd\b|fixed/.test(c) ? "FD" : /\brd\b|recurring/.test(c) ? "RD" : /ppf/.test(c) ? "PPF" : /nps/.test(c) ? "NPS" : "Other";
+  }
+  const netOf = (r) => (r.kind === "income" ? r.amount : isSpend(r) ? -r.amount : 0);
   function monthTotals(m) {
     let income = 0, exp = 0, inv = 0;
     for (const t of state.txns) {
       if (m && t.month !== m) continue;
       if (t.kind === "income") income += t.amount;
-      else if (t.kind === "expense") { if (t.type === "Investment") inv += t.amount; else exp += t.amount; }
+      else if (isInv(t)) inv += t.amount;
+      else if (t.kind === "expense") exp += t.amount;
     }
     return { income: round2(income), exp: round2(exp), inv: round2(inv), sav: round2(income - exp) };
   }
@@ -176,7 +189,7 @@
     $("dashKpis").innerHTML = stat("Income", fmt0(tot.income), months.length ? `${monthLabel(months[0])} – ${monthLabel(months[months.length - 1])}` : "No entries yet")
       + stat("Spent", fmt0(tot.exp), "Excludes investments")
       + stat("Saved", fmt0(tot.sav), "Income − spent", tot.sav < 0 ? "neg" : "pos")
-      + stat("Invested", fmt0(tot.inv), "Marked Investment");
+      + stat("Invested", fmt0(tot.inv), "Not counted as spending");
     const accs = sortedAccounts();
     $("dashAccounts").innerHTML = accs.map(accountCard).join("") || `<div class="empty">No accounts</div>`;
     applyBars($("dashAccounts"));
@@ -294,7 +307,8 @@
     const m = state.month;
     const rows = state.txns.filter((x) => x.month === m);
     const fk = state.filKind, q = $("filQ").value.trim().toLowerCase();
-    const shown = rows.filter((r) => (!fk || r.kind === fk) && (!q || [r.name, r.category, r.type, accName(r.account_id), r.to_account_id ? accName(r.to_account_id) : ""]
+    const kindOk = (r) => !fk || (fk === "invest" ? isInv(r) : fk === "expense" ? isSpend(r) : r.kind === fk);
+    const shown = rows.filter((r) => kindOk(r) && (!q || [r.name, r.category, r.type, accName(r.account_id), r.to_account_id ? accName(r.to_account_id) : ""]
       .some((s) => String(s || "").toLowerCase().includes(q))))
       .sort((a, b) => (b.expense_date || "").localeCompare(a.expense_date || "") || String(b.created_at).localeCompare(String(a.created_at)));
 
@@ -314,18 +328,16 @@
     }
     let html = "";
     for (const g of groups) {
-      const net = g.rows.reduce((s, r) => s + (r.kind === "income" ? r.amount : r.kind === "expense" ? -r.amount : 0), 0);
+      const net = g.rows.reduce((s, r) => s + netOf(r), 0);
       html += `<div class="day"><span>${esc(dayLabel(g.k))}</span><span class="day-net">${net === 0 ? "" : (net > 0 ? "+" : "−") + num0(Math.abs(net))}</span></div>`;
       for (const r of g.rows) {
         const name = r.name || (r.kind === "transfer" ? "Transfer" : r.category || (r.kind === "income" ? "Income" : "Expense"));
         const acc = r.kind === "transfer" ? `${accName(r.account_id)} → ${accName(r.to_account_id)}` : r.account_id ? accName(r.account_id) : "";
         const meta = [r.kind !== "transfer" && r.name ? r.category : "", acc].filter(Boolean).map(esc).join(" · ");
         const tags = (r.type ? `<span class="tag ${esc(r.type)}">${esc(r.type)}</span>` : "") + (!r.account_id && r.kind !== "transfer" ? '<span class="tag unlinked">Not linked</span>' : "");
-        const sign = r.kind === "income" ? "+" : r.kind === "expense" ? "−" : "";
+        const sign = r.kind === "income" ? "+" : isSpend(r) ? "−" : "";
         const cls = r.kind === "income" ? "pos" : r.kind === "transfer" ? "muted-amt" : isInv(r) ? "inv" : "";
-        const letter = (r.category || r.name || "?").trim().charAt(0).toUpperCase();
-        const ic = r.kind === "income" ? `<span class="e-ic income">${icon("i-in")}</span>` : r.kind === "transfer" ? `<span class="e-ic transfer">${icon("i-swap")}</span>`
-          : `<span class="e-ic h${hue(r.category || r.name)}">${esc(letter)}</span>`;
+        const ic = entryIcon(isInv(r) ? "invest" : r.kind, r.category || r.name);
         html += `<button type="button" class="entry" data-edit="${esc(r.id)}">
           ${ic}
           <span class="e-main"><span class="e-name">${esc(name)}</span><span class="e-meta">${r.recurring_id ? `<span class="rep" title="Recurring">${icon("i-repeat")}</span>` : ""}${meta ? `<span class="m-txt">${meta}</span>` : ""}${tags}</span></span>
@@ -334,8 +346,8 @@
       }
     }
     if (fk || q) {
-      const sum = shown.reduce((s, r) => s + (r.kind === "income" ? r.amount : r.kind === "expense" ? -r.amount : 0), 0);
-      html += `<div class="list-foot"><span>${shown.length} of ${rows.length} entries</span>${fk === "transfer" ? "" : `<span class="${sum < 0 ? "" : "pos"}" id="filteredTotal">Net ${sum < 0 ? "−" : "+"}${money(Math.abs(sum))}</span>`}</div>`;
+      const sum = shown.reduce((s, r) => s + netOf(r), 0);
+      html += `<div class="list-foot"><span>${shown.length} of ${rows.length} entries</span>${fk === "transfer" || fk === "invest" ? "" : `<span class="${sum < 0 ? "" : "pos"}" id="filteredTotal">Net ${sum < 0 ? "−" : "+"}${money(Math.abs(sum))}</span>`}</div>`;
     } else {
       html += `<div class="list-foot"><span>${rows.length} entr${rows.length === 1 ? "y" : "ies"}</span></div>`;
     }
@@ -356,11 +368,25 @@
     $("fKind").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.k === k); b.setAttribute("aria-checked", String(b.dataset.k === k)); });
     $("entryDlg").dataset.kind = k;
   }
+  function setInvType(v) {
+    state.invType = INVEST_TYPES.includes(v) ? v : null;
+    $("fInv").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.v === state.invType); b.setAttribute("aria-checked", String(b.dataset.v === state.invType)); });
+    const names = distinct(state.txns.filter((t) => isInv(t) && (!state.invType || investType(t) === state.invType)).map((t) => t.name));
+    $("invNames").innerHTML = names.map((n) => `<option value="${esc(n)}">`).join("");
+  }
   function refreshFormFields() {
     const kind = state.kind, editRow = state.editingRow;
     const unlinked = !!(editRow && !editRow.account_id && editRow.kind !== "transfer");
-    $("wrapCat").classList.toggle("hidden", kind === "transfer");
+    const inv = kind === "invest";
+    $("wrapCat").classList.toggle("hidden", kind === "transfer" || inv);
     $("wrapType").classList.toggle("hidden", kind !== "expense");
+    $("wrapInv").classList.toggle("hidden", !inv);
+    // "Investment" as a Need/Want value only remains for older entries that already use it.
+    const legacyInv = !!(editRow && editRow.kind === "expense" && editRow.type === "Investment") || (state.editingRec && state.editingRec.type === "Investment");
+    const curType = $("fType").value;
+    $("fType").innerHTML = `<option value="">—</option><option>Need</option><option>Want</option>${legacyInv ? "<option>Investment</option>" : ""}`;
+    $("fType").value = curType === "Investment" && !legacyInv ? "" : curType;
+    $("lblType").textContent = legacyInv ? "Need / Want / Investment" : "Need or want";
     $("wrapAcc").classList.toggle("hidden", kind === "transfer");
     $("wrapFrom").classList.toggle("hidden", kind !== "transfer");
     $("wrapTo").classList.toggle("hidden", kind !== "transfer");
@@ -372,6 +398,8 @@
     $("fName").placeholder = kind === "transfer" ? "e.g. Credit card bill, ATM withdrawal" : kind === "income" ? "e.g. November salary" : "What was it for?";
     const rec = state.mode === "recurring";
     if (rec) { $("lblName").textContent = "Name"; $("fName").placeholder = "e.g. Rent, Maid, Netflix"; }
+    if (inv) { $("lblName").textContent = "Name / scheme"; $("fName").placeholder = "e.g. Parag Parikh Flexi Cap, SBI FD"; $("fName").setAttribute("list", "invNames"); }
+    else $("fName").removeAttribute("list");
     $("lblDate").textContent = rec ? "Next due on" : "Date";
     $("repeatRow").classList.toggle("hidden", rec || !!state.editing);
     $("autoRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
@@ -396,6 +424,7 @@
     const month = rec ? d.slice(0, 7) : state.editingRow ? state.editingRow.month : state.month;
     if (d && d.slice(0, 7) !== month) return { error: "Date must be in " + monthLabel(month) + ".", field: "fDate" };
     const row = { kind, month, expense_date: d || null, amount: amt, name: $("fName").value.trim() || null };
+    const inv = kind === "invest";
     if (rec) {
       if (!row.name) return { error: "Give it a name, e.g. Rent.", field: "fName" };
       row.next_due = d; row.auto = $("fAuto").checked;
@@ -409,13 +438,17 @@
       row.category = $("fCat").value.trim() || null;
       row.account_id = $("fAcc").value || null;
       if (kind === "expense") row.type = $("fType").value || null;
+      if (inv) {
+        if (!state.invType) return { error: "Choose the type of investment." };
+        row.category = state.invType;
+      }
       const unlinkedOk = !rec && state.editingRow && !state.editingRow.account_id;
       if (!row.account_id && !unlinkedOk) return { error: kind === "income" ? "Choose the account the money went into." : "Choose where it was paid from.", field: "fAcc" };
     }
     return { row };
   }
   let lastAcc = "";
-  function openEntry(id) {
+  function openEntry(id, opts = {}) {
     const r = id ? state.txns.find((x) => x.id === id) : null;
     if (id && !r) return;
     state.mode = "entry"; state.editingRec = null;
@@ -425,9 +458,10 @@
     $("fAcc").innerHTML = ""; $("fFrom").innerHTML = ""; $("fTo").innerHTML = "";
     const m = r ? r.month : state.month;
     $("fDate").min = m + "-01"; $("fDate").max = m + "-" + pad(lastDay(m));
-    setKind(r ? r.kind : state.kind || "expense");
-    $("fType").value = r ? r.type || "" : "";
+    setKind(r ? r.kind : opts.kind || state.kind || "expense");
+    setInvType(r && r.kind === "invest" ? r.category : null);
     refreshFormFields();
+    $("fType").value = r ? r.type || "" : "";
     $("fDate").value = r ? r.expense_date || "" : defaultDate();
     $("fName").value = r ? r.name || "" : "";
     $("fAmt").value = r ? String(r.amount) : "";
@@ -447,8 +481,8 @@
     rent: { kind: "expense", name: "Rent", category: "Housing", type: "Need" },
     maid: { kind: "expense", name: "Maid", category: "Household help", type: "Need" },
     cook: { kind: "expense", name: "Cook", category: "Household help", type: "Need" },
-    sip: { kind: "expense", name: "Mutual fund SIP", category: "Mutual fund", type: "Investment" },
-    rd: { kind: "expense", name: "Recurring deposit", category: "Recurring deposit", type: "Investment" },
+    sip: { kind: "invest", name: "Mutual fund SIP", category: "Mutual fund" },
+    rd: { kind: "invest", name: "Recurring deposit", category: "RD" },
     sub: { kind: "expense", name: "Subscription", category: "Subscriptions", type: "Want" },
     emi: { kind: "expense", name: "Loan EMI", category: "EMI", type: "Need" },
     salary: { kind: "income", name: "Salary", category: "Salary" },
@@ -464,8 +498,9 @@
     $("fRepeat").checked = false; $("fAuto").checked = r ? r.auto : true;
     $("fPresets").querySelectorAll("button").forEach((b) => b.classList.remove("on"));
     setKind(r ? r.kind : "expense");
-    $("fType").value = r ? r.type || "" : "";
+    setInvType(r && r.kind === "invest" ? r.category : null);
     refreshFormFields();
+    $("fType").value = r ? r.type || "" : "";
     $("fDate").value = r ? r.next_due : state.today;
     $("fName").value = r ? r.name : "";
     $("fAmt").value = r ? String(r.amount) : "";
@@ -482,11 +517,12 @@
   function applyPreset(key) {
     const p = PRESETS[key]; if (!p) return;
     $("fPresets").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.p === key));
-    if (p.kind !== state.kind) { setKind(p.kind); $("fAcc").value = ""; }
-    $("fType").value = p.type || "";
+    if (p.kind !== state.kind) setKind(p.kind);
     refreshFormFields();
+    $("fType").value = p.type || "";
     if (!$("fAcc").value) { const def = (sortedAccounts().find((a) => a.kind === "bank") || {}).id; if (def) $("fAcc").value = def; }
-    $("fName").value = p.name; $("fCat").value = p.category;
+    $("fName").value = p.name;
+    if (p.kind === "invest") { setInvType(p.category); $("fCat").value = ""; } else $("fCat").value = p.category;
     $("fAmt").focus();
   }
   function sizeAmount() { const i = $("fAmt"); i.style.width = Math.max(1, (i.value || i.placeholder).length) + 0.6 + "ch"; }
@@ -592,9 +628,10 @@
         <span class="r-val"><span class="r-amt${r.kind === "income" ? " pos" : ""}">${sign}${esc(fmt0(r.amount))}</span><span class="r-sub">next ${esc(shortD(r.next_due))}</span></span>
       </button>`;
     }).join("") : `<div class="rows-empty">Nothing yet. Add rent, your maid or cook, SIPs, RDs and subscriptions once, and they're added for you every month.</div>`;
-    const out = state.recurring.filter((r) => r.kind === "expense").reduce((s, r) => s + r.amount, 0);
-    const inc = state.recurring.filter((r) => r.kind === "income").reduce((s, r) => s + r.amount, 0);
-    $("recNote").textContent = out || inc ? [out ? `${fmt0(out)} goes out` : "", inc ? `${fmt0(inc)} comes in` : ""].filter(Boolean).join(" and ") + " every month through recurring payments." : "";
+    const sum = (f) => state.recurring.filter(f).reduce((s, r) => s + r.amount, 0);
+    const out = sum((r) => r.kind === "expense" && r.type !== "Investment"), ivs = sum(isInv), inc = sum((r) => r.kind === "income");
+    const parts = [out ? `${fmt0(out)} goes out` : "", ivs ? `${fmt0(ivs)} is invested` : "", inc ? `${fmt0(inc)} comes in` : ""].filter(Boolean);
+    $("recNote").textContent = parts.length ? parts.join(", ").replace(/, ([^,]*)$/, " and $1") + " every month through recurring payments." : "";
     applyBars($("tab-plan"));
   }
 
@@ -670,43 +707,74 @@
     $("budDlg").close(); renderCurrent(); toast("Budget removed");
   }
 
-  // ---------- investment ----------
+  // ---------- investments ----------
   function renderInvestment() {
     const inv = state.txns.filter(isInv);
-    const places = new Map();
-    for (const t of inv) {
-      const k = catKey(t.category) || "\u0000";
-      if (!places.has(k)) places.set(k, { key: k, name: catKey(t.category) ? t.category.trim() : "Unspecified", amt: 0, n: 0, last: "" });
-      const p = places.get(k); p.amt += t.amount; p.n += 1;
-      const d = t.expense_date || t.month + "-01"; if (d > p.last) p.last = d;
-    }
-    const list = [...places.values()].sort((a, b) => b.amt - a.amt);
     const total = round2(inv.reduce((s, t) => s + t.amount, 0));
-    const thisM = round2(inv.filter((t) => t.month === thisMonth()).reduce((s, t) => s + t.amount, 0));
-    $("invKpis").innerHTML = stat("Total invested", fmt0(total), "All months")
-      + stat("This month", fmt0(thisM), monthLabel(thisMonth()))
-      + stat("Places", String(list.length), "")
-      + stat("Largest", list.length ? list[0].name : "—", list.length ? fmt0(list[0].amt) : "");
-    const c = donut("inv", "chInv", list.map((p) => p.name), list.map((p) => p.amt), { text: fmt0(total), sub: "INVESTED" });
-    let html = `<thead><tr><th>Place</th><th class="num hide-sm">Entries</th><th class="num">Total (₹)</th><th class="num">Share</th></tr></thead><tbody>`;
-    list.forEach((p, i) => {
-      html += `<tr><td><span class="lg-inline"><span class="dot" data-i="${i}"></span>${esc(p.name)}</span></td><td class="num hide-sm">${p.n}</td><td class="num">${num2(p.amt)}</td><td class="num">${total ? Math.round((p.amt / total) * 100) : 0}%</td></tr>`;
-    });
-    html += list.length ? `<tr class="total"><td>Total</td><td class="num hide-sm">${inv.length}</td><td class="num">${num2(total)}</td><td class="num">100%</td></tr>`
-      : `<tr><td colspan="4" class="empty">No investments yet. Add an expense and set Need / Want / Investment to Investment.</td></tr>`;
-    $("invPlaces").innerHTML = html + "</tbody>";
-    $("invPlaces").querySelectorAll(".dot").forEach((d) => { d.style.backgroundColor = c.colors[+d.dataset.i] || css("--faint"); });
-
-    const cur = $("filPlace").value;
-    $("filPlace").innerHTML = `<option value="">All places</option>` + list.map((p) => `<option value="${esc(p.key)}">${esc(p.name)}</option>`).join("");
-    if ([...$("filPlace").options].some((o) => o.value === cur)) $("filPlace").value = cur;
-    const fp = $("filPlace").value;
-    const rows = inv.filter((t) => !fp || (catKey(t.category) || "\u0000") === fp)
-      .sort((a, b) => (b.expense_date || b.month).localeCompare(a.expense_date || a.month) || String(b.created_at).localeCompare(String(a.created_at)));
-    let ih = `<thead><tr><th>Date</th><th>Place</th><th class="hide-sm">Description</th><th class="hide-sm">Paid from</th><th class="num">Amount (₹)</th></tr></thead><tbody>`;
-    for (const t of rows) ih += `<tr><td>${t.expense_date ? fmtDate(t.expense_date) : monthLabel(t.month)}</td><td>${esc(t.category || "Unspecified")}</td><td class="hide-sm">${esc(t.name || "")}</td><td class="hide-sm">${esc(t.account_id ? accName(t.account_id) : "—")}</td><td class="num">${num2(t.amount)}</td></tr>`;
-    if (!rows.length) ih += `<tr><td colspan="5" class="empty">No investment entries.</td></tr>`;
-    $("invTable").innerHTML = ih + "</tbody>";
+    const year = state.today.slice(0, 4), month = state.today.slice(0, 7);
+    const sumIf = (f) => round2(inv.filter(f).reduce((s, t) => s + t.amount, 0));
+    $("invKpis").innerHTML = stat("Invested in total", fmt0(total), inv.length ? `${inv.length} entr${inv.length === 1 ? "y" : "ies"}` : "Nothing yet")
+      + stat("This year", fmt0(sumIf((t) => t.month.slice(0, 4) === year)), year)
+      + stat("This month", fmt0(sumIf((t) => t.month === month)), monthLabel(month));
+    // group by type, then by holding (name)
+    const groups = new Map();
+    for (const t of inv) {
+      const ty = investType(t);
+      if (!groups.has(ty)) groups.set(ty, { type: ty, amt: 0, holdings: new Map() });
+      const g = groups.get(ty); g.amt += t.amount;
+      const label = (t.name || (t.kind === "expense" ? t.category : "") || "Unnamed").trim();
+      const hk = catKey(label);
+      if (!g.holdings.has(hk)) g.holdings.set(hk, { name: label, amt: 0, entries: [] });
+      const h = g.holdings.get(hk); h.amt += t.amount; h.entries.push(t);
+    }
+    const list = [...groups.values()].sort((a, b) => b.amt - a.amt);
+    $("invSplit").classList.toggle("hidden", !list.length);
+    $("invMonthly").classList.toggle("hidden", !list.length);
+    if (!list.length) {
+      $("invGroups").innerHTML = `<section class="panel"><div class="blank"><div class="blank-t">No investments yet</div>
+        <div class="muted">Add what you put into mutual funds, stocks, gold, FDs, RDs, PPF or NPS. It's kept out of your spending.</div></div></section>`;
+      if (state.charts.invBar) { state.charts.invBar.destroy(); state.charts.invBar = null; }
+      return;
+    }
+    const c = donut("inv", "chInv", list.map((g) => g.type), list.map((g) => g.amt), { text: fmt0(total), sub: "INVESTED" });
+    legend($("lgInv"), list.map((g) => g.type), list.map((g) => g.amt), c.colors, c.total);
+    const pct = (v) => (total ? Math.round((v / total) * 100) : 0);
+    const dateOf = (t) => t.expense_date || t.month + "-01";
+    $("invGroups").innerHTML = list.map((g, i) => {
+      const holdings = [...g.holdings.values()].sort((a, b) => b.amt - a.amt);
+      return `<details class="panel fold inv-group"${i === 0 ? " open" : ""}>
+        <summary><span class="dot" data-i="${i}"></span><span class="ig-name">${esc(g.type)}</span><span class="ig-amt">${esc(fmt0(g.amt))}</span><span class="muted ig-pct">${pct(g.amt)}%</span><svg class="i chev"><use href="#i-down"/></svg></summary>
+        ${holdings.map((h) => {
+          const es = h.entries.sort((a, b) => dateOf(b).localeCompare(dateOf(a)));
+          return `<details class="holding"><summary><span class="r-main"><span class="r-title">${esc(h.name)}</span>
+              <span class="r-sub">${es.length} time${es.length === 1 ? "" : "s"} · last ${esc(shortD(dateOf(es[0])))} ${esc(dateOf(es[0]).slice(0, 4))}</span></span>
+              <span class="h-amt">${money(h.amt)}</span><svg class="i chev"><use href="#i-down"/></svg></summary>
+            <div class="h-entries">${es.map((t) => `<button type="button" class="h-entry" data-edit="${esc(t.id)}">
+              <span>${esc(fmtDate(dateOf(t)))}</span><span class="muted">${esc(t.account_id ? accName(t.account_id) : "Not linked")}${t.recurring_id ? " · recurring" : ""}</span><span class="h-e-amt">${money(t.amount)}</span></button>`).join("")}</div>
+          </details>`;
+        }).join("")}
+      </details>`;
+    }).join("");
+    $("invGroups").querySelectorAll(".inv-group > summary .dot").forEach((d) => { d.style.backgroundColor = c.colors[+d.dataset.i] || css("--faint"); });
+    // last 12 months
+    const months = Array.from({ length: 12 }, (_, i) => shiftMonth(month, i - 11));
+    const vals = months.map((m) => sumIf((t) => t.month === m));
+    if (state.charts.invBar) { state.charts.invBar.destroy(); state.charts.invBar = null; }
+    if (typeof Chart !== "undefined") {
+      state.charts.invBar = new Chart($("chInvBar"), {
+        type: "bar",
+        data: { labels: months.map((m) => MON[+m.slice(5, 7) - 1]), datasets: [{ data: vals, backgroundColor: css("--amber"), borderRadius: 6, maxBarThickness: 28 }] },
+        options: {
+          maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: css("--text"), titleColor: css("--surface"), bodyColor: css("--surface"), displayColors: false,
+            callbacks: { title: (it) => monthLabel(months[it[0].dataIndex]), label: (ctx) => " " + fmt0(ctx.raw) } } },
+          scales: {
+            x: { grid: { display: false }, border: { display: false } },
+            y: { beginAtZero: true, grid: { color: css("--border") }, border: { display: false }, ticks: { callback: (v) => (v >= 100000 ? (v / 100000) + "L" : v >= 1000 ? (v / 1000) + "k" : v) } },
+          },
+        },
+      });
+    }
   }
 
   // ---------- settings ----------
@@ -920,9 +988,12 @@
     $("addBtn").addEventListener("click", () => openEntry(null));
     $("fKind").addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b || b.dataset.k === state.kind) return;
-      setKind(b.dataset.k); $("fAcc").value = ""; refreshFormFields();
+      setKind(b.dataset.k); refreshFormFields();   // keeps the chosen account
     });
     $("fType").addEventListener("change", refreshFormFields);
+    $("fInv").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { setInvType(b.dataset.v); $("fName").focus(); } });
+    $("invAdd").addEventListener("click", () => openEntry(null, { kind: "invest" }));
+    $("invGroups").addEventListener("click", (e) => { const b = e.target.closest("[data-edit]"); if (b) openEntry(b.dataset.edit); });
     $("fRepeat").addEventListener("change", refreshFormFields);
     $("fPresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyPreset(b.dataset.p); });
     // plan
@@ -954,7 +1025,6 @@
     $("fDelete").addEventListener("click", deleteEntry);
     $("entryDlg").addEventListener("close", () => { state.editing = null; state.editingRow = null; });
     $("entryDlg").addEventListener("click", (e) => { if (e.target === $("entryDlg")) closeEntry(); });  // click on backdrop
-    $("filPlace").addEventListener("change", renderInvestment);
     document.addEventListener("keydown", (e) => {
       if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey && state.tab === "monthly" && !document.querySelector("dialog[open]")
         && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) && !$("tab-monthly").classList.contains("hidden")) { e.preventDefault(); openEntry(null); }

@@ -108,6 +108,7 @@
             <button type="button" data-k="expense">Expenses</button>
             <button type="button" data-k="income">Income</button>
             <button type="button" data-k="transfer">Transfers</button>
+            <button type="button" data-k="invest">Investments</button>
           </div>
           <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="filQ" type="search" placeholder="Search" aria-label="Search entries" autocomplete="off"></label>
         </div>
@@ -165,18 +166,16 @@
       </div>
     </div>
 
-    <!-- Investment -->
+    <!-- Investments: their own entry type, kept out of spending -->
     <div id="tab-investment" class="hidden">
-      <div class="pagehead"><div><h2 class="title">Investments</h2><div class="muted">Expenses marked Investment, grouped by where you invested</div></div></div>
-      <div class="summary" id="invKpis"></div>
-      <section class="panel"><div class="panel-title"><h3>Where you've invested</h3></div>
-        <div class="chartwrap"><div class="chartbox"><canvas id="chInv" aria-label="Investments by place chart"></canvas></div>
-          <div class="tablewrap"><table id="invPlaces"></table></div></div></section>
-      <section class="panel">
-        <div class="panel-title"><h3>Entries</h3>
-          <select id="filPlace" class="sm" aria-label="Filter by place"></select></div>
-        <div class="tablewrap"><table id="invTable"></table></div>
-      </section>
+      <div class="pagehead"><div><h2 class="title">Investments</h2><div class="muted">Kept separate from your spending</div></div>
+        <button class="btn primary" id="invAdd" type="button"><svg class="i"><use href="#i-plus"/></svg><span>Add investment</span></button></div>
+      <div class="summary three" id="invKpis"></div>
+      <section class="panel" id="invSplit"><div class="panel-title"><h3>Where your money is</h3></div>
+        <div class="chartwrap inv-split"><div class="chartbox"><canvas id="chInv" aria-label="Investments by type chart"></canvas></div><div class="legend" id="lgInv"></div></div></section>
+      <div id="invGroups"></div>
+      <section class="panel" id="invMonthly"><div class="panel-title"><h3>Month by month</h3><span class="muted">Last 12 months</span></div>
+        <div class="barbox"><canvas id="chInvBar" aria-label="Amount invested each month"></canvas></div></section>
     </div>
 
     <!-- Settings -->
@@ -241,19 +240,22 @@
       <button type="button" data-k="expense" class="on">Expense</button>
       <button type="button" data-k="income">Income</button>
       <button type="button" data-k="transfer">Transfer</button>
+      <button type="button" data-k="invest">Invest</button>
     </div>
     <div class="amount-in"><span>₹</span><input id="fAmt" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="Amount"></div>
     <div class="form">
+      <div class="full hidden" id="wrapInv"><label id="lblInv">Type of investment</label><div class="chips inv-types" id="fInv" role="radiogroup" aria-labelledby="lblInv"><button type="button" data-v="Mutual fund">Mutual fund</button><button type="button" data-v="Stocks">Stocks</button><button type="button" data-v="Gold">Gold</button><button type="button" data-v="FD">FD</button><button type="button" data-v="RD">RD</button><button type="button" data-v="PPF">PPF</button><button type="button" data-v="NPS">NPS</button><button type="button" data-v="Other">Other</button></div></div>
       <div class="full"><label for="fName" id="lblName">Description</label><input id="fName" maxlength="120" autocomplete="off"></div>
       <div id="wrapCat"><label for="fCat" id="lblCat">Category</label><input id="fCat" list="catList" maxlength="60" autocomplete="off"></div>
       <div id="wrapDate"><label for="fDate" id="lblDate">Date</label><input id="fDate" type="date"></div>
       <div id="wrapAcc"><label for="fAcc" id="lblAcc">Paid from</label><select id="fAcc"></select></div>
-      <div id="wrapType"><label for="fType">Need / Want / Investment</label>
+      <div id="wrapType"><label for="fType" id="lblType">Need or want</label>
         <select id="fType"><option value="">—</option><option>Need</option><option>Want</option><option>Investment</option></select></div>
       <div class="hidden" id="wrapFrom"><label for="fFrom">From</label><select id="fFrom"></select></div>
       <div class="hidden" id="wrapTo"><label for="fTo">To</label><select id="fTo"></select></div>
     </div>
     <datalist id="catList"></datalist>
+    <datalist id="invNames"></datalist>
     <div class="opts">
       <label class="opt" id="repeatRow" for="fRepeat">
         <span><span class="opt-t">Repeat every month</span><span class="opt-s">For rent, SIPs, subscriptions and other regular payments</span></span>

@@ -6,7 +6,7 @@ A personal finance web app with these pages:
 - **Monthly** (the home page): the month's entries, grouped by day, with search and a type filter. **Add entry** opens a form; click any entry to edit or delete it. Account balances for the month are in a collapsible section below. On desktop, press `N` to add an entry.
 - **Overview:** totals, account balances, charts and a month-by-month table.
 - **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
-- **Investments:** where you've invested.
+- **Investments:** your portfolio. It shows the total, this year and this month, a split by type (Mutual fund, Stocks, Gold, FD, RD, PPF, NPS, Other), each holding with its entries, and a month-by-month chart. **Add investment** opens the entry form with **Invest** selected.
 - **Settings** (click your name, top right): your profile, your accounts and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
 
 The design is dark. It runs on Vercel, with a Neon Postgres database.
@@ -75,9 +75,10 @@ If your Google OAuth consent screen is still in **Testing**, Google only lets th
 - **Transfers** move money between your own accounts. Use them for credit-card bill payments (bank → card) and ATM withdrawals (bank → cash). Transfers are not counted as income or expenditure.
 - **Each month starts** from the previous month's closing balance. The Monthly page shows opening, in, out and closing for every account. Overview and Settings show current balances and, for cards, the amount due and the limit still available.
 - **Totals:**
-  - Expenditure = expenses not marked Investment.
+  - Expenditure = expenses (investments aren't expenses).
   - Savings = Income − Expenditure.
-  - The Investments page groups entries marked Investment by the "Invested in" field.
+  - **Invest** is its own entry type. Money leaves the bank, cash or card account it's paid from, but it isn't counted as spending, in Savings or in budgets. It's counted under Invested.
+  - Older expenses that were marked *Investment* are left as they were. They're still counted under Invested and shown on the Investments page, where their type is worked out from what was typed in "Invested in".
 
 Entries from very old versions (before accounts existed) are marked **Not linked** and don't change balances. To link one to an account, edit it.
 

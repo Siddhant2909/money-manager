@@ -216,6 +216,7 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .e-ic svg.i { width: 16px; height: 16px; stroke-width: 2; }
 .e-ic.income { background: var(--green-soft); color: var(--green); }
 .e-ic.transfer { background: var(--blue-soft); color: var(--blue); }
+.e-ic.invest { background: var(--amber-soft); color: var(--amber); }
 .e-ic { font-size: 14px; font-weight: 650; }
 .e-ic.h1 { color: var(--c1); background: color-mix(in srgb, var(--c1) 15%, transparent); }
 .e-ic.h2 { color: var(--c2); background: color-mix(in srgb, var(--c2) 15%, transparent); }
@@ -249,8 +250,8 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .fold summary::-webkit-details-marker { display: none; }
 .fold summary > span:first-child { flex: 1; }
 .fold summary .chev { color: var(--faint); transition: transform .2s; }
-.fold[open] summary .chev { transform: rotate(180deg); }
-.fold[open] summary { border-bottom: 1px solid var(--border); }
+.fold[open] > summary .chev { transform: rotate(180deg); }
+.fold[open] > summary { border-bottom: 1px solid var(--border); }
 .fold > :not(summary) { margin-left: 20px; margin-right: 20px; }
 .fold > .note { margin-bottom: 18px; }
 .fold > .tablewrap { margin-top: 6px; }
@@ -276,7 +277,8 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .presets button, .chips button { border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); border-radius: 999px;
   padding: 6px 12px; font-size: 13px; font-weight: 550; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .presets button:hover, .chips button:hover { color: var(--text); background: var(--surface-2); }
-.presets button.on { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.presets button.on, .chips button.on { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.inv-types { margin: 0; }
 .mini-nav { display: flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 600; color: var(--text); }
 .mini-nav span { min-width: 74px; text-align: center; }
 .rep { display: inline-grid; place-items: center; color: var(--accent); }
@@ -319,6 +321,30 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .b-alloc.neg { color: var(--red); }
 .b-row .bar { margin-top: 7px; height: 4px; }
 .rows-empty { padding: 18px 20px; font-size: 13.5px; color: var(--muted); }
+
+/* ---------- investments ---------- */
+.summary.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.inv-group summary { gap: 10px; }
+.inv-group .dot { width: 10px; height: 10px; border-radius: 3px; }
+.ig-name { flex: 1; }
+.ig-amt { font-variant-numeric: tabular-nums; }
+.ig-pct { min-width: 36px; text-align: right; font-size: 13px; }
+.inv-group > summary > span:first-child { flex: none; }
+.holding { border-top: 1px solid var(--border); margin: 0 !important; }
+.holding > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 12px 20px; cursor: pointer; }
+.holding > summary::-webkit-details-marker { display: none; }
+.holding > summary:hover { background: var(--surface-2); }
+.holding .chev { width: 15px; height: 15px; color: var(--faint); transition: transform .2s; }
+.holding[open] .chev { transform: rotate(180deg); }
+.h-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.h-entries { padding: 0 20px 10px; }
+.h-entry { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; padding: 8px 10px; border: 0;
+  background: var(--surface-2); color: inherit; font: inherit; font-size: 13.5px; text-align: left; border-radius: 8px; cursor: pointer; }
+.h-entry + .h-entry { margin-top: 4px; }
+.h-entry:hover { background: var(--border); }
+.h-entry .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.h-e-amt { font-variant-numeric: tabular-nums; font-weight: 550; }
+.barbox { position: relative; height: 200px; }
 
 /* ---------- settings ---------- */
 .settings { max-width: 640px; margin: 0 auto; }
@@ -458,7 +484,9 @@ dialog[open] { animation: pop .18s ease-out; }
   .m-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fold summary { font-size: 14.5px; }
   .toolbar { padding: 12px; }
-  .seg button { padding: 5px 10px; }
+  .seg button { padding: 5px 10px; flex: none; }
+  .toolbar .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .toolbar .seg::-webkit-scrollbar { display: none; }
   .search { flex: 1 1 100%; }
   .entry { padding: 11px 16px; gap: 12px; }
   .day { padding: 14px 16px 4px; }
@@ -482,6 +510,15 @@ dialog[open] { animation: pop .18s ease-out; }
   .budget { padding: 16px; }
   .b-row .r-val .r-sub, [data-rec] .r-val .r-sub { display: block; }
   .bottomnav button { font-size: 10.5px; }
+  .summary.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .summary.three .stat { border-top: 0; padding: 12px; }
+  .summary.three .stat + .stat { border-left: 1px solid var(--border); }
+  .summary.three .s-val { font-size: 16px; }
+  .holding > summary { padding: 12px 16px; }
+  .h-entries { padding: 0 16px 10px; }
+  .h-entry { grid-template-columns: 92px minmax(0, 1fr) auto; }
+  #invAdd { position: static; width: auto; height: 38px; padding: 0 14px; border-radius: 10px; box-shadow: none; }
+  #invAdd span { display: inline; }
   .r-val .r-sub { display: none; }
   .pf-row { flex-wrap: wrap; }
   .avatar.xl { width: 48px; height: 48px; font-size: 17px; }
