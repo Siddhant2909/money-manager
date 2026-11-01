@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Create account · Money Manager</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/styles.css">
+<script src="/js/common.js" defer></script>
+<script src="/js/register.js" defer></script>
+</head>
+<body>
+<main>
+  <section class="center">
+    <div class="card authcard wide">
+      <div class="brand"><img class="logo" src="/favicon.svg" alt="" width="34" height="34"><div><h1>Create your account</h1><small>Money Manager</small></div></div>
+      <form id="regForm" class="stack" novalidate>
+        <fieldset>
+          <legend>Sign-in details</legend>
+          <div class="form">
+            <div class="full"><label for="email">Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required></div>
+            <div><label for="password">Password</label><input id="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
+            <div><label for="password2">Confirm password</label><input id="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
+          </div>
+          <div class="hint">At least 10 characters. A short phrase works well, e.g. "teal lamp river 42".</div>
+        </fieldset>
+        <div>
+          <h2 class="muted">Where you spend from</h2>
+          <p class="faint">Add up to 2 bank accounts, 2 credit cards and your cash. Balances update automatically as you add entries.</p>
+        </div>
+        <div id="accForm" class="stack"></div>
+        <div class="err" id="regErr" role="alert"></div>
+        <button class="btn primary block" id="regBtn" type="submit">Create account</button>
+        <p class="auth-foot">Already registered? <a href="/">Sign in</a></p>
+      </form>
+    </div>
+  </section>
+</main>
+</body>
+</html>
