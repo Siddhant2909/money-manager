@@ -4,6 +4,9 @@
 //   DATABASE_URL (or POSTGRES_URL)  set automatically when Neon Postgres is added in Vercel
 //   ALLOWED_EMAILS   optional. Comma-separated emails allowed to register. If unset, only the first account can register.
 //   AUTH_RATE_LIMIT  optional. Sign-in/registration attempts allowed per IP per 10 minutes (default 40).
+//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET  optional. Turn on "Continue with Google" (OAuth web client).
+//   APP_URL          optional. Public URL of the app (e.g. https://money.example.com), used for the Google
+//                    redirect URI. If unset, it is taken from the request's host.
 //
 // Security controls (OWASP ASVS-oriented)
 //   - Parameterised SQL only; every query is scoped to the signed-in user; composite foreign keys stop
@@ -29,6 +32,8 @@ const AUTH_WINDOW_MIN = 10;
 const SESSION_DAYS = 14, IDLE_DAYS = 7;
 const MAX_FAILS = 10, LOCK_MINUTES = 15;
 const MAX_BODY = 64 * 1024;
+const G_ID = process.env.GOOGLE_CLIENT_ID || "", G_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const googleOn = () => !!(G_ID && G_SECRET);
 
 const MONTH_RE = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 const DATE_RE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
@@ -313,12 +318,13 @@ async function getSession(req) {
   const token = readCookie(req, cookieName(req));
   if (!token || token.length > 100) return null;
   const h = sha256(token);
-  const r = await q(`select s.user_email, s.csrf, u.name, s.last_seen < now() - interval '10 minutes' as stale
+  const r = await q(`select s.user_email, s.csrf, u.name, u.pass_hash like 'scrypt$%' as has_password, s.last_seen < now() - interval '10 minutes' as stale
     from mm_sessions s join mm_users u on u.email = s.user_email
     where s.token_hash = $1 and s.expires_at > now() and s.last_seen > now() - make_interval(days => $2::int)`, [h, IDLE_DAYS]);
   if (!r.rows.length) return null;
   if (r.rows[0].stale) await q(`update mm_sessions set last_seen = now() where token_hash = $1`, [h]);
-  return { email: r.rows[0].user_email, name: r.rows[0].name || null, csrf: r.rows[0].csrf, tokenHash: h };
+  const row = r.rows[0];
+  return { email: row.user_email, name: row.name || null, hasPassword: row.has_password, csrf: row.csrf, tokenHash: h };
 }
 
 // ---------- operations ----------
@@ -334,7 +340,8 @@ async function register(req, res, body) {
   const name = nameOf(body.name);
   const problem = passwordProblem(body.password, email);
   if (problem) throw bad(problem);
-  const accounts = cleanAccounts(body.accounts);
+  // Accounts can be given here or set up after the first sign-in.
+  const accounts = body.accounts === undefined || body.accounts === null ? null : cleanAccounts(body.accounts);
   const hash = await hashPassword(body.password);
   const s = await tx(async (c) => {
     await c.query("select pg_advisory_xact_lock(727275)");
@@ -345,7 +352,7 @@ async function register(req, res, body) {
       await c.query("update mm_users set pass_hash = $2, name = $3, failed_logins = 0, locked_until = null where email = $1", [email, hash, name]);
       await c.query("delete from mm_sessions where user_email = $1", [email]);
       const has = await c.query("select count(*)::int as n from mm_accounts where user_email = $1", [email]);
-      if (!has.rows[0].n) await insertAccounts(c, email, accounts);
+      if (!has.rows[0].n && accounts) await insertAccounts(c, email, accounts);
       return createSession(c, req, email);
     }
     if (existing.rows.length) throw new ClientError(409, "An account with this email already exists. Please sign in.");
@@ -357,10 +364,10 @@ async function register(req, res, body) {
     }
     const ins = await c.query("insert into mm_users (email, pass_hash, name) values ($1, $2, $3) on conflict (email) do nothing returning email", [email, hash, name]);
     if (!ins.rows.length) throw new ClientError(409, "An account with this email already exists. Please sign in.");
-    await insertAccounts(c, email, accounts);
+    if (accounts) await insertAccounts(c, email, accounts);
     return createSession(c, req, email);
   });
-  return send(res, 200, { email, name, csrf: s.csrf }, { "Set-Cookie": s.cookie });
+  return send(res, 200, { email, name, hasPassword: true, csrf: s.csrf }, { "Set-Cookie": s.cookie });
 }
 async function login(req, res, body) {
   await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
@@ -384,12 +391,13 @@ async function login(req, res, body) {
     await c.query("update mm_users set failed_logins = 0, locked_until = null where email = $1", [email]);
     return createSession(c, req, email);
   });
-  return send(res, 200, { email, name: user.name || null, csrf: s.csrf }, { "Set-Cookie": s.cookie });
+  return send(res, 200, { email, name: user.name || null, hasPassword: true, csrf: s.csrf }, { "Set-Cookie": s.cookie });
 }
 async function changePassword(req, res, sess, body) {
   await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
-  const u = await q("select pass_hash from mm_users where email = $1", [sess.email]);
-  if (!u.rows.length || !(await checkPassword(body.current, u.rows[0].pass_hash))) {
+  const u = await q("select pass_hash, pass_hash like 'scrypt$%' as has_password from mm_users where email = $1", [sess.email]);
+  // Accounts created with Google have no password yet; setting the first one needs no current password.
+  if (!u.rows.length || (u.rows[0].has_password && !(await checkPassword(body.current, u.rows[0].pass_hash)))) {
     await sleep(300);
     throw new ClientError(400, "Current password is incorrect.");
   }
@@ -457,6 +465,84 @@ async function updateTxn(sess, body) {
   return r.rows[0];
 }
 
+// ---------- Google sign-in (OAuth 2.0 authorization code flow with PKCE) ----------
+// No Google scripts run in the page, so the strict CSP stays as it is: the browser is sent to Google and back.
+function appOrigin(req) {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
+  const host = (req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  return (isHttps(req) ? "https://" : "http://") + host;
+}
+const oauthCookie = (req) => (isHttps(req) ? "__Host-mm_oauth" : "mm_oauth");
+const clearOauth = (req) => `${oauthCookie(req)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isHttps(req) ? "; Secure" : ""}`;
+function redirect(res, location, cookies) {
+  res.statusCode = 302;
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (k !== "Content-Type") res.setHeader(k, v);
+  res.setHeader("Location", location);
+  if (cookies && cookies.length) res.setHeader("Set-Cookie", cookies);
+  res.end();
+}
+function googleStart(req, res, url) {
+  const from = url.searchParams.get("from") === "register" ? "register" : "login";
+  if (!googleOn()) return redirect(res, (from === "register" ? "/register" : "/") + "?auth_error=google_off");
+  const state = crypto.randomBytes(24).toString("base64url");
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+  const params = new URLSearchParams({
+    client_id: G_ID, redirect_uri: appOrigin(req) + "/auth/google/callback", response_type: "code",
+    scope: "openid email profile", state, code_challenge: challenge, code_challenge_method: "S256", prompt: "select_account",
+  });
+  // SameSite=Lax so the cookie comes back on the top-level redirect from Google.
+  const cookie = `${oauthCookie(req)}=${state}.${verifier}.${from}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? "; Secure" : ""}`;
+  return redirect(res, "https://accounts.google.com/o/oauth2/v2/auth?" + params.toString(), [cookie]);
+}
+async function googleCallback(req, res, url) {
+  const [state, verifier, from] = (readCookie(req, oauthCookie(req)) || "").split(".");
+  const fail = (code) => redirect(res, (from === "register" ? "/register" : "/") + "?auth_error=" + code, [clearOauth(req)]);
+  try {
+    if (!googleOn()) return fail("google_off");
+    if (url.searchParams.get("error")) return fail("google_cancelled");
+    const code = url.searchParams.get("code"), gotState = url.searchParams.get("state");
+    if (!state || !verifier || !code || !gotState || code.length > 2048 || !safeEqual(state, gotState)) return fail("google_expired");
+    await rateLimit("auth:" + clientIp(req), AUTH_LIMIT, AUTH_WINDOW_MIN);
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: G_ID, client_secret: G_SECRET, redirect_uri: appOrigin(req) + "/auth/google/callback",
+        grant_type: "authorization_code", code_verifier: verifier }).toString(),
+      signal: AbortSignal.timeout(8000),
+    });
+    const tok = await r.json().catch(() => ({}));
+    if (!r.ok || typeof tok.id_token !== "string") return fail("google_failed");
+    // The ID token came straight from Google's token endpoint over TLS, so (per OpenID Connect Core 3.1.3.7)
+    // its claims can be trusted without checking the signature. The claims themselves are still checked.
+    const claims = JSON.parse(Buffer.from(tok.id_token.split(".")[1] || "", "base64url").toString("utf8"));
+    if (!["https://accounts.google.com", "accounts.google.com"].includes(claims.iss) || claims.aud !== G_ID
+      || !(Number(claims.exp) * 1000 > Date.now()) || claims.email_verified !== true || typeof claims.email !== "string") return fail("google_failed");
+    const email = emailOf(claims.email);
+    const gname = text(typeof claims.name === "string" ? claims.name : null, 60);
+    const s = await tx(async (c) => {
+      await c.query("select pg_advisory_xact_lock(727275)");
+      const ex = await c.query("select email from mm_users where email = $1 for update", [email]);
+      if (ex.rows.length) {
+        await c.query("update mm_users set failed_logins = 0, locked_until = null, name = coalesce(name, $2) where email = $1", [email, gname]);
+      } else {
+        if (ALLOWED.length) { if (!ALLOWED.includes(email)) throw new ClientError(403, "not_allowed"); }
+        else {
+          const n = await c.query("select count(*)::int as n from mm_users");
+          if (n.rows[0].n > 0) throw new ClientError(403, "closed");
+        }
+        // 'GOOGLE' never matches a password hash, so password sign-in stays off until the user sets one.
+        await c.query("insert into mm_users (email, pass_hash, name) values ($1, 'GOOGLE', $2)", [email, gname]);
+      }
+      return createSession(c, req, email);
+    });
+    return redirect(res, "/", [s.cookie, clearOauth(req)]);
+  } catch (e) {
+    if (e instanceof ClientError) return fail(e.status === 429 ? "rate" : e.status === 403 ? e.message : "google_failed");
+    console.error("google sign-in error", e && e.code ? e.code : "", e && e.message ? e.message : e);
+    return fail("google_failed");
+  }
+}
+
 // ---------- handler ----------
 module.exports = async function handler(req, res) {
   try {
@@ -469,20 +555,24 @@ module.exports = async function handler(req, res) {
       body = await readBody(req);
       if (!body || typeof body !== "object" || Array.isArray(body)) throw bad("Malformed request");
     }
-    const op = req.method === "POST" ? body.op : url.searchParams.get("op");
+    let op = req.method === "POST" ? body.op : url.searchParams.get("op");
+    if (req.method === "GET" && url.pathname === "/auth/google") op = "google";
+    if (req.method === "GET" && url.pathname === "/auth/google/callback") op = "google_cb";
     if (typeof op !== "string" || op.length > 40) throw bad("Unknown operation");
 
-    if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, registrationRestricted: ALLOWED.length > 0 });
+    if (op === "config" && req.method === "GET") return send(res, 200, { db: !!DB_URL, google: googleOn(), registrationRestricted: ALLOWED.length > 0 });
+    if (op === "google" && req.method === "GET") return googleStart(req, res, url);
     if (!DB_URL) return send(res, 503, { error: "Database not connected. Add Neon Postgres to the Vercel project and redeploy." });
     await ensureSchema();
     housekeeping();
+    if (op === "google_cb" && req.method === "GET") return await googleCallback(req, res, url);
 
     if (req.method === "POST" && op === "register") return await register(req, res, body);
     if (req.method === "POST" && op === "login") return await login(req, res, body);
 
     const sess = await getSession(req);
     if (op === "session" && req.method === "GET") {
-      return send(res, 200, sess ? { authenticated: true, email: sess.email, name: sess.name, csrf: sess.csrf } : { authenticated: false });
+      return send(res, 200, sess ? { authenticated: true, email: sess.email, name: sess.name, hasPassword: sess.hasPassword, csrf: sess.csrf } : { authenticated: false });
     }
     if (!sess) return send(res, 401, { error: "Please sign in." });
     if (req.method === "POST" && !safeEqual(req.headers["x-csrf-token"] || "", sess.csrf)) {
