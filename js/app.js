@@ -572,11 +572,6 @@
       if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey && state.tab === "monthly" && !$("entryDlg").open
         && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) && !$("tab-monthly").classList.contains("hidden")) { e.preventDefault(); openEntry(null); }
     });
-    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-      if (typeof Chart !== "undefined") Chart.defaults.color = css("--muted");
-      if (state.tab === "dashboard" && !$("tab-dashboard").classList.contains("hidden")) renderDashboard();
-      if (state.tab === "investment" && !$("tab-investment").classList.contains("hidden")) renderInvestment();
-    });
   }
 
   async function start() {

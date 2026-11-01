@@ -1,57 +1,30 @@
-/* Money Manager — calm, minimal design. Light by default, follows the system dark mode. */
+/* Money Manager — calm, minimal dark design. */
 :root {
-  color-scheme: light dark;
-  --bg: #f6f6f3;
-  --surface: #ffffff;
-  --surface-2: #f1f1ed;
-  --border: #e7e6e1;
-  --border-strong: #d6d5cf;
-  --text: #18191b;
-  --muted: #6c6f75;
-  --faint: #9c9fa5;
-  --primary: #18191b;
-  --on-primary: #ffffff;
-  --green: #1a7f55;
-  --green-soft: #e5f3ec;
-  --red: #c4423b;
-  --red-soft: #fbeceb;
-  --amber: #a76a12;
-  --amber-soft: #f8efdf;
-  --blue-soft: #e9eef8;
-  --blue: #3d5fa8;
-  --focus: rgba(24, 25, 27, 0.12);
-  --shadow: 0 1px 2px rgba(20, 20, 18, 0.04), 0 1px 1px rgba(20, 20, 18, 0.02);
-  --shadow-lg: 0 24px 60px -12px rgba(20, 20, 18, 0.25);
+  color-scheme: dark;
+  --bg: #0e0f11;
+  --surface: #16171a;
+  --surface-2: #1e2024;
+  --border: #25272c;
+  --border-strong: #33363c;
+  --text: #ececee;
+  --muted: #9b9ea6;
+  --faint: #6b6e76;
+  --primary: #ececee;
+  --on-primary: #111214;
+  --green: #4cc28f;
+  --green-soft: rgba(76, 194, 143, 0.12);
+  --red: #f0736b;
+  --red-soft: rgba(240, 115, 107, 0.12);
+  --amber: #e3b25a;
+  --amber-soft: rgba(227, 178, 90, 0.12);
+  --blue-soft: rgba(122, 156, 230, 0.13);
+  --blue: #8eaef0;
+  --focus: rgba(236, 236, 238, 0.14);
+  --shadow: none;
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+  --c1: #6b93ec; --c2: #4cc28f; --c3: #e3b25a; --c4: #ec8a6f; --c5: #a891ee; --c6: #5cc0cc; --c7: #e884b1; --c8: #8d96a3;
   --radius: 14px;
   --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* chart palette */
-  --c1: #3f6fd8; --c2: #2f9e72; --c3: #d39b2a; --c4: #d4644a; --c5: #8a6fd6; --c6: #3aa3b1; --c7: #cf5f93; --c8: #8c96a3;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e0f11;
-    --surface: #16171a;
-    --surface-2: #1e2024;
-    --border: #25272c;
-    --border-strong: #33363c;
-    --text: #ececee;
-    --muted: #9b9ea6;
-    --faint: #6b6e76;
-    --primary: #ececee;
-    --on-primary: #111214;
-    --green: #4cc28f;
-    --green-soft: rgba(76, 194, 143, 0.12);
-    --red: #f0736b;
-    --red-soft: rgba(240, 115, 107, 0.12);
-    --amber: #e3b25a;
-    --amber-soft: rgba(227, 178, 90, 0.12);
-    --blue-soft: rgba(122, 156, 230, 0.13);
-    --blue: #8eaef0;
-    --focus: rgba(236, 236, 238, 0.14);
-    --shadow: none;
-    --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
-    --c1: #6b93ec; --c2: #4cc28f; --c3: #e3b25a; --c4: #ec8a6f; --c5: #a891ee; --c6: #5cc0cc; --c7: #e884b1; --c8: #8d96a3;
-  }
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
