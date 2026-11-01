@@ -125,24 +125,27 @@
 
     <!-- Overview -->
     <div id="tab-dashboard" class="hidden">
-      <div class="pagehead"><div><h2 class="title">Overview</h2><div class="muted">All months combined</div></div></div>
-      <div class="summary" id="dashKpis"></div>
-      <section class="panel">
-        <div class="panel-title"><h3>Accounts</h3><span class="muted">Current balances</span></div>
-        <div class="accounts" id="dashAccounts"></div>
-        <div class="total-line"><span>Available money (banks + cash)</span><span class="amt" id="dashLiquid"></span></div>
-      </section>
-      <div class="grid two">
-        <section class="panel"><div class="panel-title"><h3>Spending by category</h3></div>
-          <div class="chartwrap"><div class="chartbox"><canvas id="chCat" aria-label="Category chart"></canvas></div><div class="legend" id="lgCat"></div></div></section>
-        <section class="panel"><div class="panel-title"><h3>Expenditure by month</h3></div>
-          <div class="chartwrap"><div class="chartbox"><canvas id="chExp" aria-label="Expenditure by month chart"></canvas></div><div class="legend" id="lgExp"></div></div></section>
-      </div>
-      <section class="panel">
-        <div class="panel-title"><h3>Month by month</h3><span class="muted">₹</span></div>
+      <div class="pagehead"><div><h2 class="title">Overview</h2><div class="muted" id="ovSub"></div></div></div>
+      <section class="panel hero" id="ovHero"></section>
+
+      <div class="sec-head"><h3 id="ovMonthTitle">This month</h3></div>
+      <div class="summary three" id="dashKpis"></div>
+
+      <div class="sec-head"><h3>Accounts</h3></div>
+      <section class="panel rows" id="dashAccounts"></section>
+
+      <div class="sec-head"><h3>Spending</h3>
+        <div class="seg" id="ovRange" role="tablist" aria-label="Period"><button type="button" data-r="month" class="on">This month</button><button type="button" data-r="all">All time</button></div></div>
+      <section class="panel"><div class="chartwrap ov-split"><div class="chartbox"><canvas id="chCat" aria-label="Spending by category chart"></canvas></div><div class="legend" id="lgCat"></div></div></section>
+
+      <div class="sec-head"><h3>Last 6 months</h3><span class="keys"><span class="key inc"></span>Income<span class="key sp"></span>Spent</span></div>
+      <section class="panel"><div class="barbox"><canvas id="chTrend" aria-label="Income and spending, last 6 months"></canvas></div></section>
+
+      <details class="panel fold" id="ovFold">
+        <summary><span>All months</span><span class="muted" id="ovMonths"></span><svg class="i chev"><use href="#i-down"/></svg></summary>
         <div class="tablewrap"><table id="dashTable"></table></div>
-        <p class="note">Savings = Income − Expenditure. Expenditure excludes investments; transfers between your accounts are not counted.</p>
-      </section>
+        <p class="note">Saved = income − spent. Investments and transfers between your accounts aren't counted as spending.</p>
+      </details>
     </div>
 
     <!-- Plan: budgets and recurring payments -->

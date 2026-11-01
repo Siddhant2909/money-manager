@@ -322,6 +322,34 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .b-row .bar { margin-top: 7px; height: 4px; }
 .rows-empty { padding: 18px 20px; font-size: 13.5px; color: var(--muted); }
 
+/* ---------- overview ---------- */
+.hero { display: flex; align-items: stretch; gap: 16px; padding: 22px; margin-bottom: 0;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface) 55%); }
+.hero-main { flex: 1; min-width: 0; }
+.hero-big { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
+.hero-sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hero-inv { display: flex; align-items: center; gap: 14px; min-width: 190px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .15s; }
+.hero-inv:hover { border-color: var(--border-strong); }
+.hero-inv > span { flex: 1; display: flex; flex-direction: column; }
+.hero-inv-v { font-size: 20px; font-weight: 650; color: var(--amber); font-variant-numeric: tabular-nums; }
+.hero-inv svg.i { width: 16px; height: 16px; color: var(--faint); }
+#tab-dashboard .summary { margin-bottom: 0; }
+#tab-dashboard .panel.rows { margin-bottom: 0; }
+#tab-dashboard .sec-head .seg button { padding: 4px 10px; font-size: 12.5px; }
+#tab-dashboard .row .bar { margin-top: 7px; max-width: 260px; }
+#tab-dashboard .row .bar > span { background: var(--accent); }
+#tab-dashboard .row .bar > span.over { background: var(--red); }
+.s-sub.pos { color: var(--green); }
+.s-sub.neg { color: var(--red); }
+@media (min-width: 720px) { #tab-dashboard .ov-split { grid-template-columns: 240px minmax(0, 1fr); gap: 32px; } }
+.hero-sub > span { white-space: nowrap; }
+.keys { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-left: 8px; }
+.key.inc { background: var(--green); }
+.key.sp { background: var(--c1); }
+#ovFold { margin-top: 20px; }
+
 /* ---------- investments ---------- */
 .summary.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .inv-group summary { gap: 10px; }
@@ -387,14 +415,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 tr.total td { font-weight: 650; border-top: 1px solid var(--border-strong); border-bottom: 0; }
 td.empty { text-align: center; color: var(--faint); padding: 28px 10px; }
 
-/* ---------- accounts (overview) ---------- */
-.accounts { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.acc { padding: 14px 16px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
-.a-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-.a-name { font-weight: 550; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a-kind { font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
-.a-val { font-size: 20px; font-weight: 650; margin-top: 6px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.a-sub { font-size: 12.5px; color: var(--muted); }
+/* ---------- progress bars ---------- */
 .bar { height: 4px; border-radius: 4px; background: var(--border); margin-top: 10px; overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--text); border-radius: 4px; }
 .bar > span.over { background: var(--red); }
@@ -510,6 +531,9 @@ dialog[open] { animation: pop .18s ease-out; }
   .budget { padding: 16px; }
   .b-row .r-val .r-sub, [data-rec] .r-val .r-sub { display: block; }
   .bottomnav button { font-size: 10.5px; }
+  .hero { flex-direction: column; padding: 18px; }
+  .hero-big { font-size: 30px; }
+  .hero-inv { min-width: 0; }
   .summary.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .summary.three .stat { border-top: 0; padding: 12px; }
   .summary.three .stat + .stat { border-left: 1px solid var(--border); }
