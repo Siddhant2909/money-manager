@@ -433,6 +433,7 @@
     $("lblDate").textContent = rec ? "Next due on" : "Date";
     $("repeatRow").classList.toggle("hidden", rec || !!state.editing);
     $("autoRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
+    $("everyRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
     $("fPresets").classList.toggle("hidden", !rec || !!state.editingRec);
     const curAcc = $("fAcc").value || (editRow ? editRow.account_id : "");
     $("fAcc").innerHTML = accountOptions(() => true, curAcc, unlinked);
@@ -458,6 +459,8 @@
     if (rec) {
       if (!row.name) return { error: "Give it a name, e.g. Rent.", field: "fName" };
       row.next_due = d; row.auto = $("fAuto").checked;
+      const iv = readInterval(); if (iv.error) return iv;
+      row.every = iv.every; row.unit = iv.unit;
       if (state.editingRec && d === state.editingRec.next_due) row.day = state.editingRec.day;   // keep "31st" when this month is shorter
     }
     if (kind === "transfer") {
@@ -482,7 +485,7 @@
     const r = id ? state.txns.find((x) => x.id === id) : null;
     if (id && !r) return;
     state.mode = "entry"; state.editingRec = null;
-    $("fRepeat").checked = false; $("fAuto").checked = true;
+    $("fRepeat").checked = false; $("fAuto").checked = true; setEvery(1, "month");
     state.editing = r ? r.id : null; state.editingRow = r;
     $("fErr").textContent = "";
     $("fAcc").innerHTML = ""; $("fFrom").innerHTML = ""; $("fTo").innerHTML = "";
@@ -516,6 +519,7 @@
     sub: { kind: "expense", name: "Subscription", category: "Subscriptions", type: "Want" },
     emi: { kind: "expense", name: "Loan EMI", category: "EMI", type: "Need" },
     salary: { kind: "income", name: "Salary", category: "Salary" },
+    recharge: { kind: "expense", name: "Mobile recharge", category: "Mobile", type: "Need", every: 84, unit: "day" },
   };
   // The entry form doubles as the recurring-payment form.
   function openRecurring(idv) {
@@ -525,7 +529,7 @@
     $("fErr").textContent = "";
     $("fAcc").innerHTML = ""; $("fFrom").innerHTML = ""; $("fTo").innerHTML = "";
     $("fDate").min = ""; $("fDate").max = "";
-    $("fRepeat").checked = false; $("fAuto").checked = r ? r.auto : true;
+    $("fRepeat").checked = false; $("fAuto").checked = r ? r.auto : true; setEvery(r ? r.every : 1, r ? r.unit : "month");
     $("fPresets").querySelectorAll("button").forEach((b) => b.classList.remove("on"));
     setKind(r ? r.kind : "expense");
     setInvType(r && r.kind === "invest" ? r.category : null);
@@ -552,8 +556,38 @@
     $("fType").value = p.type || "";
     if (!$("fAcc").value) { const def = (sortedAccounts().find((a) => a.kind === "bank") || {}).id; if (def) $("fAcc").value = def; }
     $("fName").value = p.name;
+    setEvery(p.every || 1, p.unit || "month");
     if (p.kind === "invest") { setInvType(p.category); $("fCat").value = ""; } else $("fCat").value = p.category;
     $("fAmt").focus();
+  }
+  // ----- how often a recurring payment repeats -----
+  const UNIT_MAX = { day: 366, week: 52, month: 24, year: 5 };
+  function setEvery(n, unit) {
+    $("fEvery").value = String(n || 1); $("fUnit").value = UNIT_MAX[unit] ? unit : "month";
+    markEvery();
+  }
+  function markEvery() {
+    const n = Number($("fEvery").value), key = `${n}:${$("fUnit").value}`;
+    $("fEveryChips").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.e === key));
+    for (const o of $("fUnit").options) o.textContent = n === 1 ? o.value : o.value + "s";
+  }
+  function readInterval() {
+    const n = Number($("fEvery").value), unit = $("fUnit").value;
+    if (!Number.isInteger(n) || n < 1 || n > UNIT_MAX[unit]) return { error: `Repeat every 1 to ${UNIT_MAX[unit]} ${unit}s.`, field: "fEvery" };
+    return { every: n, unit };
+  }
+  // "5th of every month", "Every 84 days", "Every 3 months on the 31st", "Every year on 5 Jan"
+  function schedText(r) {
+    const n = Number(r.every) || 1, u = r.unit || "month";
+    if (u === "day") return n === 1 ? "Every day" : `Every ${n} days`;
+    if (u === "week") return n === 1 ? "Every week" : `Every ${n} weeks`;
+    if (u === "year") return `${n === 1 ? "Every year" : `Every ${n} years`} on ${r.day} ${MON[+r.next_due.slice(5, 7) - 1]}`;
+    return n === 1 ? `${ordinal(r.day)} of every month` : `Every ${n} months on the ${ordinal(r.day)}`;
+  }
+  // Rough amount per month, to compare schedules (84 days ≈ 0.36 of the amount a month).
+  function perMonth(r) {
+    const n = Number(r.every) || 1, u = r.unit || "month";
+    return r.amount * (u === "day" ? 30.44 / n : u === "week" ? 30.44 / (7 * n) : u === "year" ? 1 / (12 * n) : 1 / n);
   }
   function sizeAmount() { const i = $("fAmt"); i.style.width = Math.max(1, (i.value || i.placeholder).length) + 0.6 + "ch"; }
   function closeEntry() { $("entryDlg").close(); state.editing = null; state.editingRow = null; state.editingRec = null; }
@@ -580,12 +614,17 @@
         state.txns = state.txns.map((x) => (x.id === saved.id ? saved : x));
         toast("Entry updated");
       } else {
-        const repeat = $("fRepeat").checked ? { auto: $("fAuto").checked } : undefined;
+        let repeat;
+        if ($("fRepeat").checked) {
+          const iv = readInterval();
+          if (iv.error) { $("fErr").textContent = iv.error; $("fEvery").focus(); return; }
+          repeat = { auto: $("fAuto").checked, ...iv };
+        }
         const res = await api("addTxn", { row, repeat });
         state.txns.push(res.row);
         if (res.recurring) state.recurring.push(res.recurring);
         if (row.kind !== "transfer" && row.account_id) lastAcc = row.account_id;
-        toast(res.recurring ? `Entry added · repeats on the ${ordinal(res.recurring.day)}` : "Entry added");
+        toast(res.recurring ? `Entry added · repeats: ${schedText(res.recurring).toLowerCase()}` : "Entry added");
       }
       closeEntry();
       renderCurrent();
@@ -649,19 +688,21 @@
     const other = [...spend.entries()].filter(([k]) => !budgeted.has(k)).reduce((s, [, v]) => s + v.amt, 0);
     $("budNote").textContent = cats.length && other > 0 ? `${fmt0(other)} spent this month in categories without a budget.` : "";
     // recurring
-    const recs = [...state.recurring].sort((a, b) => a.day - b.day || a.name.localeCompare(b.name));
+    const recs = [...state.recurring].sort((a, b) => a.next_due.localeCompare(b.next_due) || a.name.localeCompare(b.name));
     $("recRows").innerHTML = recs.length ? recs.map((r) => {
       const acc = r.kind === "transfer" ? `${accName(r.account_id)} → ${accName(r.to_account_id)}` : accName(r.account_id);
       const sign = r.kind === "income" ? "+" : r.kind === "expense" ? "−" : "";
       return `<button type="button" class="row" data-rec="${esc(r.id)}">${entryIcon(r.kind, r.category || r.name)}
-        <span class="r-main"><span class="r-title">${esc(r.name)}</span><span class="r-sub">${esc(ordinal(r.day))} of every month · ${esc(acc)}${r.auto ? "" : " · confirm"}</span></span>
+        <span class="r-main"><span class="r-title">${esc(r.name)}</span><span class="r-sub">${esc(schedText(r))} · ${esc(acc)}${r.auto ? "" : " · confirm"}</span></span>
         <span class="r-val"><span class="r-amt${r.kind === "income" ? " pos" : ""}">${sign}${esc(fmt0(r.amount))}</span><span class="r-sub">next ${esc(shortD(r.next_due))}</span></span>
       </button>`;
     }).join("") : `<div class="rows-empty">Nothing yet. Add rent, your maid or cook, SIPs, RDs and subscriptions once, and they're added for you every month.</div>`;
-    const sum = (f) => state.recurring.filter(f).reduce((s, r) => s + r.amount, 0);
+    const sum = (f) => state.recurring.filter(f).reduce((s, r) => s + perMonth(r), 0);
     const out = sum((r) => r.kind === "expense" && r.type !== "Investment"), ivs = sum(isInv), inc = sum((r) => r.kind === "income");
     const parts = [out ? `${fmt0(out)} goes out` : "", ivs ? `${fmt0(ivs)} is invested` : "", inc ? `${fmt0(inc)} comes in` : ""].filter(Boolean);
-    $("recNote").textContent = parts.length ? parts.join(", ").replace(/, ([^,]*)$/, " and $1") + " every month through recurring payments." : "";
+    const allMonthly = state.recurring.every((r) => (r.unit || "month") === "month" && Number(r.every || 1) === 1);
+    const list = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+    $("recNote").textContent = parts.length ? (allMonthly ? "" : "About ") + list + " each month through recurring payments." : "";
     applyBars($("tab-plan"));
   }
 
@@ -1104,6 +1145,9 @@
     $("ovRange").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.r !== ovRange) { ovRange = b.dataset.r; renderDashboard(); } });
     $("invGroups").addEventListener("click", (e) => { const b = e.target.closest("[data-edit]"); if (b) openEntry(b.dataset.edit); });
     $("fRepeat").addEventListener("change", refreshFormFields);
+    $("fEveryChips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { const [n, u] = b.dataset.e.split(":"); setEvery(Number(n), u); } });
+    $("fEvery").addEventListener("input", () => { $("fEvery").value = $("fEvery").value.replace(/\D/g, "").slice(0, 3); markEvery(); });
+    $("fUnit").addEventListener("change", markEvery);
     $("fPresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyPreset(b.dataset.p); });
     // plan
     $("pPrev").addEventListener("click", () => { setMonth(shiftMonth(state.month, -1)); renderPlan(); });

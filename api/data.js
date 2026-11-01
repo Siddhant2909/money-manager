@@ -137,6 +137,11 @@ async function ensureSchema() {
       await c.query(`create index if not exists mm_recurring_user on mm_recurring (user_email, next_due)`);
       await c.query(`alter table mm_recurring drop constraint if exists mm_recurring_kind_check`);
       await c.query(addConstraint("mm_recurring", "mm_rec_kind2", "check (kind in ('expense','income','transfer','invest'))"));
+      // How often it repeats: every N days / weeks / months / years (existing ones stay monthly).
+      await c.query(`alter table mm_recurring add column if not exists every smallint not null default 1`);
+      await c.query(`alter table mm_recurring add column if not exists unit text not null default 'month'`);
+      await c.query(addConstraint("mm_recurring", "mm_rec_interval",
+        "check (unit in ('day','week','month','year') and every >= 1 and every <= case unit when 'day' then 366 when 'week' then 52 when 'month' then 24 else 5 end)"));
       await c.query(`alter table mm_expenses add column if not exists recurring_id bigint`);
       // Monthly budgets: category null = the overall monthly budget.
       await c.query(`create table if not exists mm_budgets (
@@ -337,10 +342,10 @@ const ACC_COLS = `id::text as id, kind, slot, name, opening_balance::float8 as o
 const TXN_COLS = `id::text as id, kind, month, to_char(expense_date, 'YYYY-MM-DD') as expense_date, name, amount::float8 as amount,
   category, type, account_id::text as account_id, to_account_id::text as to_account_id, recurring_id::text as recurring_id, created_at`;
 const REC_COLS = `id::text as id, kind, name, amount::float8 as amount, category, type, account_id::text as account_id,
-  to_account_id::text as to_account_id, day, to_char(next_due, 'YYYY-MM-DD') as next_due, auto`;
+  to_account_id::text as to_account_id, day, every, unit, to_char(next_due, 'YYYY-MM-DD') as next_due, auto`;
 // Same row, with the amount as exact text, for copying into entries.
 const REC_RAW = `id::text as id, kind, name, amount::text as amount, category, type, account_id::text as account_id,
-  to_account_id::text as to_account_id, day, to_char(next_due, 'YYYY-MM-DD') as next_due`;
+  to_account_id::text as to_account_id, day, every, unit, to_char(next_due, 'YYYY-MM-DD') as next_due`;
 const BUD_COLS = `id::text as id, category, amount::float8 as amount`;
 
 async function saveAccounts(sess, body) {
@@ -386,14 +391,14 @@ async function addTxn(sess, body) {
       [sess.email, t.kind, t.month, t.date, t.name, t.amount, t.category, t.type, t.account, t.to]);
     return { row: r.rows[0] };
   }
-  // "Repeat every month": save this entry and a recurring payment whose next one is a month later.
+  // "Repeat": save this entry and a recurring payment whose next one is one interval later.
   if (!t.account) throw bad("Choose an account");
-  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10));
+  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10)), iv = cleanInterval(body.repeat);
   const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : t.kind === "invest" ? "Investment" : "Payment");
   return tx(async (c) => {
-    const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${REC_COLS}`,
-      [sess.email, t.kind, name, t.amount, t.category, t.type, t.account, t.to, day, nextMonthDate(date, day), body.repeat.auto !== false]);
+    const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto, every, unit)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning ${REC_COLS}`,
+      [sess.email, t.kind, name, t.amount, t.category, t.type, t.account, t.to, day, nextDue(date, { day, ...iv }), body.repeat.auto !== false, iv.every, iv.unit]);
     const r = await c.query(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id, recurring_id)
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${TXN_COLS}`,
       [sess.email, t.kind, t.month, date, t.name, t.amount, t.category, t.type, t.account, t.to, rec.rows[0].id]);
@@ -423,10 +428,25 @@ function clampDate(y, m, day) {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${y}-${pad2(m)}-${pad2(Math.min(day, last))}`;
 }
-function nextMonthDate(date, day) {
-  let y = Number(date.slice(0, 4)), m = Number(date.slice(5, 7)) + 1;
-  if (m > 12) { m = 1; y += 1; }
-  return clampDate(y, m, day);
+// The next date after `date` for a schedule: every N days / weeks, or every N months / years on `day`.
+function nextDue(date, { day, every = 1, unit = "month" }) {
+  const n = Number(every) || 1;
+  if (unit === "day" || unit === "week") {
+    const d = new Date(date + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + n * (unit === "week" ? 7 : 1));
+    return d.toISOString().slice(0, 10);
+  }
+  const months = unit === "year" ? 12 * n : n;
+  const total = Number(date.slice(0, 4)) * 12 + (Number(date.slice(5, 7)) - 1) + months;
+  return clampDate(Math.floor(total / 12), (total % 12) + 1, Number(day) || Number(date.slice(8, 10)));
+}
+const UNITS = { day: 366, week: 52, month: 24, year: 5 };
+function cleanInterval(src) {
+  const unit = src && src.unit ? String(src.unit) : "month";
+  const every = src && src.every !== undefined && src.every !== null && src.every !== "" ? Number(src.every) : 1;
+  if (!UNITS[unit]) throw bad("Invalid repeat interval");
+  if (!Number.isInteger(every) || every < 1 || every > UNITS[unit]) throw bad(`Repeat every 1 to ${UNITS[unit]} ${unit}s`);
+  return { every, unit };
 }
 
 // ---------- recurring payments ----------
@@ -439,25 +459,25 @@ function cleanRecurring(row) {
   if (!t.account) throw bad("Choose an account");
   const day = row.day === undefined || row.day === null || row.day === "" ? Number(due.slice(8, 10)) : Number(row.day);
   if (!Number.isInteger(day) || day < 1 || day > 31) throw bad("Invalid day of the month");
-  return { ...t, next_due: due, day, auto: row.auto !== false };
+  return { ...t, next_due: due, day, auto: row.auto !== false, ...cleanInterval(row) };
 }
 async function saveRecurring(sess, body) {
   const r = cleanRecurring(body.row);
   await checkTxnAccounts(sess.email, { kind: r.kind, account: r.account, to: r.to }, null);
-  const vals = [sess.email, r.kind, r.name, r.amount, r.category, r.type, r.account, r.to, r.day, r.next_due, r.auto];
+  const vals = [sess.email, r.kind, r.name, r.amount, r.category, r.type, r.account, r.to, r.day, r.next_due, r.auto, r.every, r.unit];
   if (body.id) {
-    const u = await q(`update mm_recurring set kind=$2, name=$3, amount=$4, category=$5, type=$6, account_id=$7, to_account_id=$8, day=$9, next_due=$10, auto=$11
-      where user_email = $1 and id = $12::bigint returning ${REC_COLS}`, [...vals, id(body.id)]);
+    const u = await q(`update mm_recurring set kind=$2, name=$3, amount=$4, category=$5, type=$6, account_id=$7, to_account_id=$8, day=$9, next_due=$10, auto=$11,
+      every=$12, unit=$13 where user_email = $1 and id = $14::bigint returning ${REC_COLS}`, [...vals, id(body.id)]);
     if (!u.rows.length) throw new ClientError(404, "Recurring payment not found");
     return u.rows[0];
   }
   const n = await q(`select count(*)::int as n from mm_recurring where user_email = $1`, [sess.email]);
   if (n.rows[0].n >= 100) throw bad("You can have up to 100 recurring payments");
-  const ins = await q(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto)
-    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${REC_COLS}`, vals);
+  const ins = await q(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto, every, unit)
+    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning ${REC_COLS}`, vals);
   return ins.rows[0];
 }
-// Adds the entry for a recurring payment's next due date, then moves next_due on a month.
+// Adds the entry for a recurring payment's next due date, then moves next_due on by one interval.
 async function postOccurrence(c, email, r, date) {
   const d = date || r.next_due;
   const e = await c.query(`insert into mm_expenses (user_email, kind, month, expense_date, name, amount, category, type, account_id, to_account_id, recurring_id)
@@ -467,7 +487,7 @@ async function postOccurrence(c, email, r, date) {
   return e.rows[0];
 }
 async function advance(c, email, r) {
-  r.next_due = nextMonthDate(r.next_due, Number(r.day));
+  r.next_due = nextDue(r.next_due, r);
   await c.query(`update mm_recurring set next_due = $3 where user_email = $1 and id = $2::bigint`, [email, r.id, r.next_due]);
 }
 // Automatic ones are added when their day comes (checked whenever the app loads), catching up on missed months.
@@ -477,7 +497,7 @@ async function postDueRecurring(email) {
   if (!due.rows.length) return;
   await tx(async (c) => {
     const rs = await c.query(`select ${REC_RAW} from mm_recurring where user_email = $1 and auto and next_due <= $2::date for update`, [email, today]);
-    for (const r of rs.rows) for (let i = 0; i < 24 && r.next_due <= today; i++) await postOccurrence(c, email, r);
+    for (const r of rs.rows) for (let i = 0; i < 60 && r.next_due <= today; i++) await postOccurrence(c, email, r);
   });
 }
 async function recurringStep(sess, body, post) {

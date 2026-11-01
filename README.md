@@ -72,11 +72,15 @@ The lock is set per device and is a privacy screen. The PIN never leaves the dev
 ## Budgets and recurring payments
 - **Monthly budget:** one limit for everything you spend in a month, not counting investments or transfers. The Monthly page shows how much is left.
 - **Category budgets:** split the monthly budget by category (e.g. Groceries ₹8,000). Each one tracks the expenses in that category. Category names match the categories on your entries, ignoring capitals. Budgets apply to every month until you change them.
-- **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions or salary once, with the date it's next due.
-  - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any missed months.
-  - Turn off **Add automatically** to confirm each month yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
-  - To make an existing entry repeat, turn on **Repeat every month** when adding it.
-  - A payment due on the 29th, 30th or 31st moves to the last day of shorter months.
+- **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions, mobile recharges or salary once, with the date it's next due and **how often it repeats**:
+  - every N days, weeks, months or years;
+  - one-tap choices for Month, 28 days, 84 days, 3 months and Year;
+  - the **Recharge** quick-fill is set to every 84 days.
+  - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any it missed.
+  - Turn off **Add automatically** to confirm each one yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
+  - To make an existing entry repeat, turn on **Repeat** when adding it and choose how often.
+  - Monthly and yearly payments keep their day of the month. One due on the 29th, 30th or 31st moves to the last day of shorter months. Day- and week-based ones simply add that many days (84 days after 1 Jan is 26 Mar).
+  - The total under the list is a per-month estimate, so an 84-day recharge counts as about a third of its price each month.
   - Deleting a recurring payment keeps the entries it already added.
 
 ## How balances work
