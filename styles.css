@@ -278,6 +278,9 @@ button.s-bar:hover { background: var(--surface-2); color: var(--text); }
 .every-in input { width: 64px; height: 36px; text-align: center; font-variant-numeric: tabular-nums; }
 .every-in select { width: auto; height: 36px; }
 .every-chips { grid-column: 1 / -1; margin: 0 !important; }
+.every-note { grid-column: 1 / -1; margin-top: -4px; color: var(--amber) !important; }
+.every-opt.locked .every-chips { display: none !important; }
+.every-opt.locked .every-in input, .every-opt.locked .every-in select { opacity: .7; cursor: not-allowed; }
 .every-chips button { padding: 5px 11px; font-size: 12.5px; }
 .presets, .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .chips { margin: 12px 0 0; }

@@ -393,7 +393,7 @@ async function addTxn(sess, body) {
   }
   // "Repeat": save this entry and a recurring payment whose next one is one interval later.
   if (!t.account) throw bad("Choose an account");
-  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10)), iv = cleanInterval(body.repeat);
+  const date = t.date || t.month + "-01", day = Number(date.slice(8, 10)), iv = isRecharge(t) ? RECHARGE : cleanInterval(body.repeat);
   const name = t.name || t.category || (t.kind === "income" ? "Income" : t.kind === "transfer" ? "Transfer" : t.kind === "invest" ? "Investment" : "Payment");
   return tx(async (c) => {
     const rec = await c.query(`insert into mm_recurring (user_email, kind, name, amount, category, type, account_id, to_account_id, day, next_due, auto, every, unit)
@@ -441,6 +441,9 @@ function nextDue(date, { day, every = 1, unit = "month" }) {
   return clampDate(Math.floor(total / 12), (total % 12) + 1, Number(day) || Number(date.slice(8, 10)));
 }
 const UNITS = { day: 366, week: 52, month: 24, year: 5 };
+// "Recharge" is a built-in expense category whose recurring payments always repeat every 84 days.
+const RECHARGE = { every: 84, unit: "day" };
+const isRecharge = (t) => t.kind === "expense" && String(t.category || "").trim().toLowerCase() === "recharge";
 function cleanInterval(src) {
   const unit = src && src.unit ? String(src.unit) : "month";
   const every = src && src.every !== undefined && src.every !== null && src.every !== "" ? Number(src.every) : 1;
@@ -459,7 +462,7 @@ function cleanRecurring(row) {
   if (!t.account) throw bad("Choose an account");
   const day = row.day === undefined || row.day === null || row.day === "" ? Number(due.slice(8, 10)) : Number(row.day);
   if (!Number.isInteger(day) || day < 1 || day > 31) throw bad("Invalid day of the month");
-  return { ...t, next_due: due, day, auto: row.auto !== false, ...cleanInterval(row) };
+  return { ...t, next_due: due, day, auto: row.auto !== false, ...(isRecharge(t) ? RECHARGE : cleanInterval(row)) };
 }
 async function saveRecurring(sess, body) {
   const r = cleanRecurring(body.row);

@@ -75,7 +75,7 @@ The lock is set per device and is a privacy screen. The PIN never leaves the dev
 - **Recurring payments:** add rent, a maid or cook, SIPs, RDs, EMIs, subscriptions, mobile recharges or salary once, with the date it's next due and **how often it repeats**:
   - every N days, weeks, months or years;
   - one-tap choices for Month, 28 days, 84 days, 3 months and Year;
-  - the **Recharge** quick-fill is set to every 84 days.
+  - **Recharge** is a built-in expense category. Recurring payments in it always repeat every **84 days**; the interval is locked in the form and enforced by the server. The **Recharge** quick-fill uses it.
   - **Automatic** ones are added as entries on their date. The app adds them when it's opened, and catches up on any it missed.
   - Turn off **Add automatically** to confirm each one yourself. Those payments appear under *Recurring this month* on the Monthly page, with **Add** and **Skip** buttons.
   - To make an existing entry repeat, turn on **Repeat** when adding it and choose how often.

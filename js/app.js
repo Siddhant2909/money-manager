@@ -434,6 +434,7 @@
     $("repeatRow").classList.toggle("hidden", rec || !!state.editing);
     $("autoRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
     $("everyRow").classList.toggle("hidden", !(rec || $("fRepeat").checked));
+    lockEvery();
     $("fPresets").classList.toggle("hidden", !rec || !!state.editingRec);
     const curAcc = $("fAcc").value || (editRow ? editRow.account_id : "");
     $("fAcc").innerHTML = accountOptions(() => true, curAcc, unlinked);
@@ -443,7 +444,7 @@
     const to = $("fTo").value || (editRow && editRow.kind === "transfer" ? editRow.to_account_id : "");
     $("fTo").innerHTML = accountOptions((a) => a.id !== $("fFrom").value, to === $("fFrom").value ? "" : to, false);
     const pool = state.txns.filter((t) => kind === "income" ? t.kind === "income" : t.kind === "expense" && (isInvest ? t.type === "Investment" : t.type !== "Investment"));
-    const sugg = distinct(pool.map((t) => t.category).concat(kind === "income" ? ["Salary"] : []));
+    const sugg = distinct(pool.map((t) => t.category).concat(kind === "income" ? ["Salary"] : kind === "expense" && !isInvest ? ["Recharge"] : []));
     $("catList").innerHTML = sugg.map((c) => `<option value="${esc(c)}">`).join("");
   }
   function readForm() {
@@ -507,6 +508,7 @@
     $("formTitle").textContent = r ? "Edit entry" : "New entry";
     $("fSave").querySelector("span").textContent = r ? "Save changes" : "Add entry";
     $("fDelete").classList.toggle("hidden", !r);
+    lockEvery();
     $("entryDlg").showModal();
     if (!r) $("fAmt").focus();
   }
@@ -519,7 +521,7 @@
     sub: { kind: "expense", name: "Subscription", category: "Subscriptions", type: "Want" },
     emi: { kind: "expense", name: "Loan EMI", category: "EMI", type: "Need" },
     salary: { kind: "income", name: "Salary", category: "Salary" },
-    recharge: { kind: "expense", name: "Mobile recharge", category: "Mobile", type: "Need", every: 84, unit: "day" },
+    recharge: { kind: "expense", name: "Mobile recharge", category: "Recharge", type: "Need" },
   };
   // The entry form doubles as the recurring-payment form.
   function openRecurring(idv) {
@@ -546,6 +548,7 @@
     $("formTitle").textContent = r ? "Edit recurring payment" : "New recurring payment";
     $("fSave").querySelector("span").textContent = r ? "Save changes" : "Save";
     $("fDelete").classList.toggle("hidden", !r);
+    lockEvery();
     $("entryDlg").showModal();
   }
   function applyPreset(key) {
@@ -558,6 +561,7 @@
     $("fName").value = p.name;
     setEvery(p.every || 1, p.unit || "month");
     if (p.kind === "invest") { setInvType(p.category); $("fCat").value = ""; } else $("fCat").value = p.category;
+    lockEvery();
     $("fAmt").focus();
   }
   // ----- how often a recurring payment repeats -----
@@ -565,6 +569,16 @@
   function setEvery(n, unit) {
     $("fEvery").value = String(n || 1); $("fUnit").value = UNIT_MAX[unit] ? unit : "month";
     markEvery();
+  }
+  // "Recharge" is a built-in category: its recurring payments always repeat every 84 days.
+  const RECHARGE = { every: 84, unit: "day" };
+  const isRechargeForm = () => state.kind === "expense" && catKey($("fCat").value) === "recharge";
+  function lockEvery() {
+    const locked = isRechargeForm();
+    if (locked) setEvery(RECHARGE.every, RECHARGE.unit);
+    $("everyRow").classList.toggle("locked", locked);
+    $("everyNote").classList.toggle("hidden", !locked);
+    $("fEvery").disabled = locked; $("fUnit").disabled = locked;
   }
   function markEvery() {
     const n = Number($("fEvery").value), key = `${n}:${$("fUnit").value}`;
@@ -1148,6 +1162,7 @@
     $("fEveryChips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { const [n, u] = b.dataset.e.split(":"); setEvery(Number(n), u); } });
     $("fEvery").addEventListener("input", () => { $("fEvery").value = $("fEvery").value.replace(/\D/g, "").slice(0, 3); markEvery(); });
     $("fUnit").addEventListener("change", markEvery);
+    $("fCat").addEventListener("input", () => { const was = $("everyRow").classList.contains("locked"); lockEvery(); if (was && !isRechargeForm()) setEvery(1, "month"); });
     $("fPresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) applyPreset(b.dataset.p); });
     // plan
     $("pPrev").addEventListener("click", () => { setMonth(shiftMonth(state.month, -1)); renderPlan(); });
