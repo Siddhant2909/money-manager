@@ -839,6 +839,7 @@
     $("welcomeTitle").textContent = firstName() ? `Welcome, ${firstName()}` : "Welcome";
     $("settingsBack").classList.toggle("hidden", state.onboarding);
     $("gEmail").textContent = state.email || "";
+    renderLock();
   }
   async function saveProfile(e) {
     e.preventDefault();
@@ -929,6 +930,70 @@
     toast("You're all set. Add your first entry.");
   }
 
+  // ---------- app lock (this device) ----------
+  async function renderLock() {
+    $("lockSec").classList.toggle("hidden", !MMLock.supported());
+    const c = MMLock.config(state.email);
+    $("lockOn").checked = !!c;
+    $("lockSub").textContent = c ? `On · ${c.len}-digit PIN${c.bio ? " + fingerprint / face" : ""}` : "Ask for a PIN when opening the app on this device";
+    $("lockAfterRow").classList.toggle("hidden", !c);
+    $("lockPinRow").classList.toggle("hidden", !c);
+    if (c) $("lockAfter").value = String(c.after);
+    $("lockBio").checked = !!(c && c.bio);
+    $("lockBioRow").classList.toggle("hidden", !c || !(await MMLock.bioAvailable()));
+  }
+  let lockMode = "new";
+  async function openLockSetup(mode) {
+    lockMode = mode;
+    $("lkSetErr").textContent = ""; $("lkPin1").value = $("lkPin2").value = ""; $("lkUser").value = state.email || "";
+    $("lkSetTitle").textContent = mode === "new" ? "Set a PIN" : "Choose a new PIN";
+    $("lkSetSave").textContent = mode === "new" ? "Turn on lock" : "Save PIN";
+    $("lkSetOpts").classList.toggle("hidden", mode !== "new" || !(await MMLock.bioAvailable()));
+    $("lkSetDlg").showModal(); $("lkPin1").focus();
+  }
+  async function saveLockSetup(e) {
+    e.preventDefault();
+    const p1 = $("lkPin1").value.trim(), p2 = $("lkPin2").value.trim();
+    $("lkSetErr").textContent = "";
+    if (!/^[0-9]{4,6}$/.test(p1)) { $("lkSetErr").textContent = "Use 4 to 6 digits."; $("lkPin1").focus(); return; }
+    if (p1 !== p2) { $("lkSetErr").textContent = "The two PINs don't match."; $("lkPin2").focus(); return; }
+    const old = MMLock.config(state.email);
+    const useBio = lockMode === "new" ? !$("lkSetOpts").classList.contains("hidden") && $("lkSetBio").checked : false;
+    $("lkSetSave").disabled = true;
+    try {
+      let c = await MMLock.enable({ email: state.email, name: state.name, pin: p1, useBio, after: old ? old.after : 60 });
+      if (lockMode !== "new" && old && old.bio) c = MMLock.update(state.email, { bio: old.bio });   // keep fingerprint / face
+      $("lkSetDlg").close(); renderLock();
+      toast(lockMode === "new" ? "App lock is on" : "PIN changed");
+    } catch (ex) {
+      $("lkSetErr").textContent = ex && ex.name === "NotAllowedError" ? "Fingerprint / face setup was cancelled. Turn it off below to use only a PIN." : (ex.message || "Couldn't turn on the lock.");
+    } finally { $("lkSetSave").disabled = false; }
+  }
+  async function toggleLock() {
+    $("lockErr").textContent = "";
+    const c = MMLock.config(state.email);
+    if ($("lockOn").checked && !c) { $("lockOn").checked = false; openLockSetup("new"); return; }
+    if (!$("lockOn").checked && c) {
+      $("lockOn").checked = true;
+      if (await MMLock.prompt(c, { title: "Enter your PIN to turn off the lock", cancel: true })) { MMLock.disable(); toast("App lock turned off"); }
+      renderLock();
+    }
+  }
+  async function toggleLockBio() {
+    $("lockErr").textContent = "";
+    const want = $("lockBio").checked;
+    try {
+      if (want) MMLock.update(state.email, { bio: await MMLock.createBio(state.email, state.name) });
+      else MMLock.update(state.email, { bio: null });
+      toast(want ? "Fingerprint / face unlock on" : "Fingerprint / face unlock off");
+    } catch { $("lockErr").textContent = "Fingerprint / face setup was cancelled."; }
+    renderLock();
+  }
+  async function changePin() {
+    const c = MMLock.config(state.email); if (!c) return;
+    if (await MMLock.prompt(c, { title: "Enter your current PIN", cancel: true })) openLockSetup("change");
+  }
+
   // ---------- navigation & auth ----------
   function markNav(key) {
     $("bottomNav").querySelectorAll("button").forEach((b) => {
@@ -965,14 +1030,24 @@
     setTab("monthly");
   }
   function signedOut(msg) {
+    MMLock.watch(null);
     MM.setCsrf(""); state.email = null; state.name = null; state.accounts = []; state.txns = [];
-    for (const d of ["entryDlg", "accDlg", "budDlg"]) if ($(d).open) $(d).close();
+    for (const d of ["entryDlg", "accDlg", "budDlg", "lkSetDlg"]) if ($(d).open) $(d).close();
     state.onboarding = false; $("settingsBtn").disabled = false; $("bottomNav").classList.remove("hidden");
     for (const k of Object.keys(state.charts)) if (state.charts[k]) { state.charts[k].destroy(); state.charts[k] = null; }
     showPage("login"); $("authErr").textContent = msg || "";
   }
   function wire() {
     MM.setUnauthorizedHandler(() => signedOut("Your session ended. Please sign in again."));
+    MMLock.setForgotHandler(async () => { try { await api("logout", {}); } catch { /* ignore */ } signedOut("App lock turned off on this device. Sign in again to continue."); });
+    $("lockOn").addEventListener("change", toggleLock);
+    $("lockBio").addEventListener("change", toggleLockBio);
+    $("lockAfter").addEventListener("change", () => { MMLock.update(state.email, { after: Number($("lockAfter").value) }); toast("Saved"); });
+    $("lockChange").addEventListener("click", changePin);
+    $("lkSetForm").addEventListener("submit", saveLockSetup);
+    for (const b of ["lkSetClose", "lkSetCancel"]) $(b).addEventListener("click", () => { $("lkSetDlg").close(); renderLock(); });
+    $("lkSetDlg").addEventListener("close", renderLock);
+    for (const id of ["lkPin1", "lkPin2"]) $(id).addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
     $("signOut2").addEventListener("click", async () => { try { await api("logout", {}); } catch { /* ignore */ } signedOut(); });
     $("settingsBtn").addEventListener("click", openSettings);
     $("settingsBack").addEventListener("click", () => setTab(state.tab));
@@ -1073,7 +1148,11 @@
       const cfg = await api("config");
       if (!cfg.db) { showPage("login"); $("authErr").textContent = "Setup is not finished: connect Neon Postgres to the Vercel project, then redeploy."; return; }
       const s = await api("session");
-      if (s.authenticated) { MM.setCsrf(s.csrf); enterApp(s.email, s.name); return; }
+      if (s.authenticated) {
+        MM.setCsrf(s.csrf);
+        if (!(await MMLock.gate(s.email))) return;   // app lock on this device: nothing loads until it's unlocked
+        enterApp(s.email, s.name); return;
+      }
       signedOut(authError);
       if (!cfg.google) { $("googleBtn").classList.add("hidden"); $("authErr").textContent = MM.AUTH_ERRORS.google_off; }
     } catch (e) { showPage("login"); $("authErr").textContent = "Could not reach the server: " + e.message; }
