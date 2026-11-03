@@ -62,7 +62,7 @@ If your Google OAuth consent screen is still in **Testing**, Google only lets th
 
 ## App lock
 In **Settings → App lock**, turn on **Lock with a PIN** (4 to 6 digits) for this device.
-- The app then asks for the PIN when it opens, and again after it's been in the background for the time you choose (immediately, 1, 5 or 15 minutes).
+- The app then asks for the PIN when it opens after being away (in the background or closed) for longer than the time you choose: immediately, 1, 5 or 15 minutes. Reloading the app, or reopening it within that time, doesn't ask again. Even with *Immediately*, a reload within 15 seconds doesn't ask.
 - On phones that support it, you can also unlock with **fingerprint or face**, using the phone's own screen lock.
 - After 5 wrong PINs there's a short wait, which grows with more wrong tries.
 - **Forgot PIN?** on the lock screen signs you out on that device and removes the lock. Sign in again with Google to continue.
