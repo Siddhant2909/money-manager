@@ -541,6 +541,7 @@ dialog.lockscreen::backdrop { background: var(--bg); backdrop-filter: none; -web
   .fold summary { font-size: 14.5px; }
   .toolbar { padding: 12px; }
   .seg button { padding: 5px 10px; flex: none; }
+  #accKind button { padding: 8px 2px; font-size: 13px; white-space: nowrap; }
   .toolbar .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .toolbar .seg::-webkit-scrollbar { display: none; }
   .search { flex: 1 1 100%; }

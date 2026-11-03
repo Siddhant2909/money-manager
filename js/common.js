@@ -44,7 +44,7 @@ const MM = (() => {
     return data;
   }
 
-  const KIND_ICON = { bank: "i-bank", card: "i-card", cash: "i-cash" };
+  const KIND_ICON = { bank: "i-bank", card: "i-card", cash: "i-cash", prepaid: "i-prepaid" };
 
   // Errors passed back in the URL after Google sign-in.
   const AUTH_ERRORS = {
