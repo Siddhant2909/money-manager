@@ -4,10 +4,10 @@ A personal finance web app with these pages:
 
 - **Sign in:** a single **Continue with Google** button. There are no passwords and no registration form. The first time you continue with Google, your account is created.
 - **Monthly** (the home page): the month's entries, grouped by day, with search and a type filter. **Add entry** opens a form; click any entry to edit or delete it. Account balances for the month are in a collapsible section below. On desktop, press `N` to add an entry.
-- **Overview:** how much money you have now (banks + cash − card dues) and how much is invested; this month against last month; your accounts (tap one to edit it); spending by category for this month or all time; a 6-month income vs spending chart; and every month in a fold-away table.
+- **Overview:** how much money you have now (banks + prepaid cards + cash − card dues) and how much is invested; this month against last month; your accounts (tap one to edit it); spending by category for this month or all time; a 6-month income vs spending chart; and every month in a fold-away table.
 - **Plan:** your monthly budget, budgets by category, and recurring payments (rent, maid, cook, SIPs, RDs, subscriptions, salary).
 - **Investments:** your portfolio. It shows the total, this year and this month, a split by type (Mutual fund, Stocks, Gold, FD, RD, PPF, NPS, Other), each holding with its entries, and a month-by-month chart. **Add investment** opens the entry form with **Invest** selected.
-- **Settings** (click your name, top right): your profile, your accounts, **App lock** and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account or a credit card.
+- **Settings** (click your name, top right): your profile, your accounts, **App lock** and sign out. New users start here to add their first bank account. Tap an account to edit or remove it, or use **Add account** for a second bank account, a credit card or a prepaid card (up to two of each).
 
 The design is dark. It runs on Vercel, with a Neon Postgres database.
 
@@ -83,9 +83,13 @@ The lock is set per device and is a privacy screen. The PIN never leaves the dev
 
 ## How balances work
 - **In Settings**, enter each bank account's and your cash's current balance, and each card's credit limit and amount currently due.
+- **Prepaid cards and wallets** (a metro card, FASTag, Paytm or a food card) hold your own money, like a small bank account. Enter the balance on the card when you add it.
+  - **Top-up:** add a Transfer from your bank to the card, e.g. HDFC → Delhi Metro, ₹500. It isn't counted as spending.
+  - **Paying with it:** add an Expense paid from the card, e.g. a ₹40 metro ride under Travel. This is counted as spending, and the card's balance goes down.
+  - Prepaid balances are part of the money you have on Overview.
 - **Income** (e.g. salary on the 1st) adds to the account it is received in.
 - **Expenses** reduce the bank or cash balance they are paid from, or add to the amount due on a credit card.
-- **Transfers** move money between your own accounts. Use them for credit-card bill payments (bank → card) and ATM withdrawals (bank → cash). Transfers are not counted as income or expenditure.
+- **Transfers** move money between your own accounts. Use them for credit-card bill payments (bank → card), ATM withdrawals (bank → cash) and prepaid top-ups (bank → metro card). Transfers are not counted as income or expenditure.
 - **Each month starts** from the previous month's closing balance. The Monthly page shows opening, in, out and closing for every account. Overview and Settings show current balances and, for cards, the amount due and the limit still available.
 - **Totals:**
   - Expenditure = expenses (investments aren't expenses).

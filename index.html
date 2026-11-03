@@ -44,6 +44,7 @@
   <symbol id="i-outa" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
   <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/></symbol>
   <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
+  <symbol id="i-prepaid" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M14 9.5a3.5 3.5 0 0 1 0 5M16.8 7.5a6.5 6.5 0 0 1 0 9M6.5 15h3"/></symbol>
   <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/></symbol>
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
 </svg>
@@ -124,7 +125,7 @@
       <details class="panel fold" id="accFold">
         <summary><span>Account balances</span><span class="muted" id="monthLiquidS"></span><svg class="i chev"><use href="#i-down"/></svg></summary>
         <div class="tablewrap"><table id="accMonthTable"></table></div>
-        <div class="total-line"><span>Banks + cash at month end</span><span class="amt" id="monthLiquid"></span></div>
+        <div class="total-line"><span id="monthLiquidLbl">Banks + cash at month end</span><span class="amt" id="monthLiquid"></span></div>
         <p class="note">Each month starts from the previous month's closing balance. For cards, In is the amount spent, Out is the amount paid off, and Closing is the amount due.</p>
       </details>
     </div>
@@ -352,6 +353,7 @@
     <div class="seg full" id="accKind" role="radiogroup" aria-label="Account type">
       <button type="button" data-k="bank" class="on">Bank account</button>
       <button type="button" data-k="card">Credit card</button>
+      <button type="button" data-k="prepaid">Prepaid card</button>
     </div>
     <div class="form">
       <div class="full" id="accNameWrap"><label for="accName">Name</label><input id="accName" maxlength="60" autocomplete="off"></div>

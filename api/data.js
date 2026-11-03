@@ -42,7 +42,8 @@ const KINDS = ["expense", "income", "transfer", "invest"];
 // Investments are their own entry type (not spending). The type is kept in the category column.
 const INVEST_TYPES = ["Mutual fund", "Stocks", "Gold", "FD", "RD", "PPF", "NPS", "Other"];
 const TYPES = ["Need", "Want", "Investment"];
-const SLOTS = [["bank", 1], ["bank", 2], ["card", 1], ["card", 2], ["cash", 1]];
+// Prepaid cards / wallets (metro card, FASTag, Paytm...) hold your own money, like a small bank account.
+const SLOTS = [["bank", 1], ["bank", 2], ["card", 1], ["card", 2], ["prepaid", 1], ["prepaid", 2], ["cash", 1]];
 class ClientError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const bad = (msg) => new ClientError(400, msg);
 
@@ -95,6 +96,9 @@ async function ensureSchema() {
         credit_limit numeric(14,2) check (credit_limit is null or credit_limit > 0),
         created_at timestamptz not null default now(),
         unique (user_email, kind, slot), unique (user_email, id))`);
+      // v2 of the account kind check adds 'prepaid'.
+      await c.query(`alter table mm_accounts drop constraint if exists mm_accounts_kind_check`);
+      await c.query(addConstraint("mm_accounts", "mm_acc_kind2", "check (kind in ('bank','card','cash','prepaid'))"));
       await c.query(`create table if not exists mm_expenses (
         id bigserial primary key, user_email text not null,
         month text not null check (month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
@@ -261,7 +265,7 @@ function nameOf(v) {
   return n;
 }
 function cleanAccounts(list) {
-  if (!Array.isArray(list) || list.length > 5) throw bad("Invalid accounts");
+  if (!Array.isArray(list) || list.length > SLOTS.length) throw bad("Invalid accounts");
   const out = new Map();
   for (const a of list) {
     if (!a || typeof a !== "object") throw bad("Invalid accounts");
@@ -375,7 +379,7 @@ async function checkTxnAccounts(email, t, existing) {
   const r = ids.length ? await q(`select id::text as id, kind from mm_accounts where user_email = $1 and id = any($2::bigint[])`, [email, ids]) : { rows: [] };
   const kindOf = Object.fromEntries(r.rows.map((x) => [x.id, x.kind]));
   for (const i of ids) if (!kindOf[i]) throw bad("Invalid account");
-  if (t.kind === "transfer" && kindOf[t.account] === "card") throw bad("Transfers must come from a bank account or cash");
+  if (t.kind === "transfer" && kindOf[t.account] === "card") throw bad("Transfers must come from a bank account, prepaid card or cash");
   if (!t.account && t.kind !== "transfer") {
     // Only entries from before accounts existed may stay unlinked.
     if (!existing || existing.account_id !== null) throw bad("Choose an account");

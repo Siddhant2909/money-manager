@@ -1,7 +1,8 @@
 "use strict";
 (() => {
   const { $, esc, fmt, fmt0, num0, num2, round2, pad, monthLabel, monthLong, thisMonth, todayISO, shiftMonth, lastDay, fmtDate, MON, MONEY_RE, icon, api, toast, KIND_ICON } = MM;
-  const KIND_LABEL = { bank: "Bank", card: "Card", cash: "Cash" };
+  const KIND_LABEL = { bank: "Bank", card: "Card", prepaid: "Prepaid", cash: "Cash" };
+  const KIND_NAME = { bank: "Bank account", card: "Credit card", prepaid: "Prepaid card", cash: "Cash" };
   const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const state = { email: null, name: null, onboarding: false, accounts: [], txns: [], recurring: [], budgets: [],
     today: todayISO(), month: thisMonth(),
@@ -62,8 +63,9 @@
   // ---------- accounts & balances ----------
   const accById = (id) => state.accounts.find((a) => a.id === id);
   const accName = (id) => (id ? (accById(id) ? accById(id).name : "Unknown account") : "Not linked");
-  const sortedAccounts = () => [...state.accounts].sort((a, b) => ["bank", "card", "cash"].indexOf(a.kind) - ["bank", "card", "cash"].indexOf(b.kind) || a.slot - b.slot);
-  // For bank/cash: in = money received, out = money spent. For cards: in = amount spent on the card, out = amount paid off.
+  const ACC_ORDER = ["bank", "card", "prepaid", "cash"];
+  const sortedAccounts = () => [...state.accounts].sort((a, b) => ACC_ORDER.indexOf(a.kind) - ACC_ORDER.indexOf(b.kind) || a.slot - b.slot);
+  // For bank/cash/prepaid: in = money received (or topped up), out = money spent. For cards: in = amount spent on the card, out = amount paid off.
   function effect(acc, t) {
     const a = Number(t.amount);
     if (t.kind === "transfer") {
@@ -180,11 +182,12 @@
     const accs = sortedAccounts(), bal = (a) => accountStats(a, null).closing;
     const banks = accs.filter((a) => a.kind === "bank").reduce((s, a) => s + bal(a), 0);
     const cash = accs.filter((a) => a.kind === "cash").reduce((s, a) => s + bal(a), 0);
+    const prepaid = accs.filter((a) => a.kind === "prepaid").reduce((s, a) => s + bal(a), 0);
     const dues = accs.filter((a) => a.kind === "card").reduce((s, a) => s + bal(a), 0);
-    const have = round2(banks + cash - dues), tot = monthTotals(null);
+    const have = round2(banks + cash + prepaid - dues), tot = monthTotals(null);
     $("ovSub").textContent = months.length ? `${monthLabel(months[0])} – ${monthLabel(months[months.length - 1])}` : "Add entries to see your overview";
     // headline: what you have right now, and what's invested
-    const parts = [`Banks ${fmt0(banks)}`, cash ? `Cash ${fmt0(cash)}` : "", dues ? `Card dues −${fmt0(dues)}` : ""].filter(Boolean);
+    const parts = [`Banks ${fmt0(banks)}`, prepaid ? `Prepaid ${fmt0(prepaid)}` : "", cash ? `Cash ${fmt0(cash)}` : "", dues ? `Card dues −${fmt0(dues)}` : ""].filter(Boolean);
     $("ovHero").innerHTML = `<div class="hero-main"><div class="s-label">Money you have</div>
         <div class="hero-big${have < 0 ? " neg" : ""}">${esc(fmt0(have))}</div><div class="hero-sub">${parts.map((x) => `<span>${esc(x)}</span>`).join(" · ")}</div></div>
       <button type="button" class="hero-inv" data-goto="investment"><span><span class="s-label">Invested</span><span class="hero-inv-v">${esc(fmt0(tot.inv))}</span></span>${icon("i-right")}</button>`;
@@ -200,7 +203,7 @@
     // accounts
     $("dashAccounts").innerHTML = accs.map((a) => {
       const v = bal(a);
-      const sub = a.kind === "card" ? `${fmt0(round2(a.credit_limit - v))} of ${fmt0(a.credit_limit)} available` : KIND_LABEL[a.kind] === "Bank" ? "Bank account" : "Cash";
+      const sub = a.kind === "card" ? `${fmt0(round2(a.credit_limit - v))} of ${fmt0(a.credit_limit)} available` : KIND_NAME[a.kind];
       const bar = a.kind === "card" ? `<span class="bar"><span data-w="${Math.max(0, Math.min(100, (v / a.credit_limit) * 100)).toFixed(1)}"${v > a.credit_limit ? ' class="over"' : ""}></span></span>` : "";
       return `<button type="button" class="row" data-acc="${esc(a.id)}"><span class="r-ic">${icon(KIND_ICON[a.kind])}</span>
         <span class="r-main"><span class="r-title">${esc(a.name)}</span><span class="r-sub">${esc(sub)}</span>${bar}</span>
@@ -301,7 +304,9 @@
     }
     $("accMonthTable").innerHTML = at + "</tbody>";
     $("monthLiquid").textContent = fmt(liquid); $("monthLiquid").classList.toggle("neg", liquid < 0);
-    $("monthLiquidS").innerHTML = `${esc(fmt0(liquid))}<span class="hide-sm"> in banks + cash</span>`;
+    const liqName = state.accounts.some((a) => a.kind === "prepaid") ? "banks, prepaid + cash" : "banks + cash";
+    $("monthLiquidLbl").textContent = `${liqName[0].toUpperCase()}${liqName.slice(1)} at month end`;
+    $("monthLiquidS").innerHTML = `${esc(fmt0(liquid))}<span class="hide-sm"> in ${liqName}</span>`;
 
     renderDue();
     renderEntries();
@@ -425,7 +430,7 @@
     $("lblCat").textContent = kind === "income" ? "Source" : isInvest ? "Invested in" : "Category";
     $("fCat").placeholder = kind === "income" ? "e.g. Salary" : isInvest ? "e.g. Mutual fund, Gold" : "e.g. Groceries";
     $("lblName").textContent = kind === "transfer" ? "Description (optional)" : "Description";
-    $("fName").placeholder = kind === "transfer" ? "e.g. Credit card bill, ATM withdrawal" : kind === "income" ? "e.g. November salary" : "What was it for?";
+    $("fName").placeholder = kind === "transfer" ? "e.g. Card bill, ATM withdrawal, Metro top-up" : kind === "income" ? "e.g. November salary" : "What was it for?";
     const rec = state.mode === "recurring";
     if (rec) { $("lblName").textContent = "Name"; $("fName").placeholder = "e.g. Rent, Maid, Netflix"; }
     if (inv) { $("lblName").textContent = "Name / scheme"; $("fName").placeholder = "e.g. Parag Parikh Flexi Cap, SBI FD"; $("fName").setAttribute("list", "invNames"); }
@@ -827,7 +832,6 @@
   }
 
   // ---------- settings ----------
-  const KIND_NAME = { bank: "Bank account", card: "Credit card", cash: "Cash" };
   function openSettings() {
     renderSettings();
     $("profileForm").classList.add("hidden"); $("pfEdit").classList.remove("hidden"); $("pfErr").textContent = "";
@@ -852,7 +856,7 @@
     $("accRows").innerHTML = html;
     const none = !state.accounts.length;
     $("accRows").classList.toggle("hidden", none);
-    $("accAdd").classList.toggle("hidden", none || (!freeSlot("bank") && !freeSlot("card")));
+    $("accAdd").classList.toggle("hidden", none || !["bank", "card", "prepaid"].some(freeSlot));
     $("accSec").classList.toggle("hidden", none); $("accNote").classList.toggle("hidden", none);
     $("welcome").classList.toggle("hidden", !state.onboarding);
     $("welcomeTitle").textContent = firstName() ? `Welcome, ${firstName()}` : "Welcome";
@@ -881,8 +885,12 @@
     $("accKind").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
     $("accNameWrap").classList.toggle("hidden", k === "cash");
     $("accLimWrap").classList.toggle("hidden", k !== "card");
-    $("accBalLbl").textContent = k === "card" ? "Amount due when you started (₹)" : k === "cash" ? "Cash you started with (₹)" : "Balance when you started (₹)";
-    $("accName").placeholder = k === "card" ? "e.g. HDFC Millennia" : "e.g. SBI Salary";
+    $("accBalLbl").textContent = k === "card" ? "Amount due when you started (₹)" : k === "cash" ? "Cash you started with (₹)"
+      : k === "prepaid" ? "Balance on the card when you started (₹)" : "Balance when you started (₹)";
+    $("accName").placeholder = k === "card" ? "e.g. HDFC Millennia" : k === "prepaid" ? "e.g. Delhi Metro card" : "e.g. SBI Salary";
+    if (!acc.id) $("accHint").textContent = k === "prepaid"
+      ? "For a metro card, FASTag or wallet. Top it up with a Transfer from your bank, and add what you pay with it as an Expense."
+      : state.accounts.some((x) => x.kind === "bank") ? "" : "Enter what's in the account today. Your balance updates as you add entries.";
   }
   function openAccount(id) {
     const a = id ? accById(id) : null;
@@ -891,15 +899,14 @@
     $("accTitle").textContent = a ? (a.kind === "cash" ? "Cash" : "Edit account") : "Add account";
     $("accKind").classList.toggle("hidden", !!a);
     const hasBank = state.accounts.some((x) => x.kind === "bank");
-    if (!a) $("accKind").querySelectorAll("button").forEach((b) => { b.disabled = !freeSlot(b.dataset.k) || (b.dataset.k === "card" && !hasBank); });
-    setAccKind(a ? a.kind : freeSlot("bank") ? "bank" : "card");
+    if (!a) $("accKind").querySelectorAll("button").forEach((b) => { b.disabled = !freeSlot(b.dataset.k) || (b.dataset.k !== "bank" && !hasBank); });
+    setAccKind(a ? a.kind : ["bank", "card", "prepaid"].find(freeSlot));
     $("accName").value = a ? a.name : "";
     $("accBal").value = a ? String(a.opening_balance) : "";
     $("accLim").value = a && a.credit_limit ? String(a.credit_limit) : "";
     const removable = a && a.kind !== "cash" && !(a.kind === "bank" && a.slot === 1);
     $("accRemove").classList.toggle("hidden", !removable);
-    $("accHint").textContent = a ? "Current balances are worked out from this starting amount plus your entries."
-      : !hasBank ? "Enter what's in the account today. Your balance updates as you add entries." : "";
+    if (a) $("accHint").textContent = "Current balances are worked out from this starting amount plus your entries.";
     $("accDlg").showModal();
     if (!a) $("accName").focus();
   }
